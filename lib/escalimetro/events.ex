@@ -510,6 +510,30 @@ defmodule Escalimetro.Events do
     end
   end
 
+  ## Results
+
+  def get_event_results(%Scope{} = scope, %Event{} = event) do
+    if can_manage_event?(scope, event) do
+      ballot_results =
+        event
+        |> list_result_ballots()
+        |> build_ballot_results(list_result_votes(event))
+
+      %{
+        event: event,
+        ballot_results: ballot_results,
+        ballots_count: length(ballot_results),
+        active_votes_count: sum_result_count(ballot_results, :active_votes_count),
+        rejected_votes_count: sum_result_count(ballot_results, :rejected_votes_count)
+      }
+      |> put_event_results_summary()
+    else
+      empty_event_results(event)
+    end
+  end
+
+  def get_event_results(_scope, %Event{} = event), do: empty_event_results(event)
+
   def change_vote(%Scope{} = _scope, %Vote{} = vote, attrs \\ %{}) do
     Vote.changeset(vote, attrs)
   end
@@ -828,6 +852,247 @@ defmodule Escalimetro.Events do
     |> String.downcase()
     |> String.trim()
     |> String.replace(~r/\s+/, " ")
+  end
+
+  defp list_result_ballots(%Event{id: event_id}) do
+    Ballot
+    |> where(event_id: ^event_id)
+    |> order_by([b], asc: b.position, asc: b.inserted_at)
+    |> preload(options: ^ordered_ballot_options_query())
+    |> Repo.all()
+  end
+
+  defp list_result_votes(%Event{id: event_id}) do
+    Vote
+    |> where(event_id: ^event_id)
+    |> order_by([v], asc: v.inserted_at)
+    |> preload([:ballot_option, participant: :user])
+    |> Repo.all()
+  end
+
+  defp build_ballot_results(ballots, votes) do
+    votes_by_ballot = Enum.group_by(votes, & &1.ballot_id)
+
+    Enum.map(ballots, fn ballot ->
+      build_ballot_result(ballot, Map.get(votes_by_ballot, ballot.id, []))
+    end)
+  end
+
+  defp build_ballot_result(%Ballot{kind: "multiple_choice"} = ballot, votes) do
+    active_votes = Enum.filter(votes, &active_result_vote?/1)
+    active_votes_count = length(active_votes)
+
+    option_results =
+      ballot.options
+      |> Enum.map(&multiple_choice_option_result(&1, votes, active_votes_count))
+      |> sort_option_results()
+      |> mark_winner(active_votes_count)
+
+    %{
+      ballot: ballot,
+      option_results: option_results,
+      winner: Enum.find(option_results, & &1.winner),
+      active_votes_count: active_votes_count,
+      rejected_votes_count: length(votes) - active_votes_count,
+      rejected_vote_results: rejected_vote_results(votes)
+    }
+  end
+
+  defp build_ballot_result(%Ballot{kind: "yes_no_maybe"} = ballot, votes) do
+    active_votes = Enum.filter(votes, &active_result_vote?/1)
+    active_votes_count = length(active_votes)
+
+    option_results =
+      yes_no_maybe_result_values()
+      |> Enum.map(fn {value, label, position} ->
+        yes_no_maybe_option_result(value, label, position, votes, active_votes_count)
+      end)
+      |> sort_option_results()
+      |> mark_winner(active_votes_count)
+
+    %{
+      ballot: ballot,
+      option_results: option_results,
+      winner: Enum.find(option_results, & &1.winner),
+      active_votes_count: active_votes_count,
+      rejected_votes_count: length(votes) - active_votes_count,
+      rejected_vote_results: rejected_vote_results(votes)
+    }
+  end
+
+  defp multiple_choice_option_result(%BallotOption{} = option, votes, active_votes_count) do
+    option_votes = Enum.filter(votes, &(&1.ballot_option_id == option.id))
+    active_votes = Enum.filter(option_votes, &active_result_vote?/1)
+    votes_count = length(active_votes)
+
+    %{
+      key: "option-#{option.id}",
+      label: option.label,
+      position: option.position,
+      votes_count: votes_count,
+      intensity_count: Enum.count(active_votes, & &1.intensity),
+      rejected_votes_count: length(option_votes) - votes_count,
+      percent: vote_percent(votes_count, active_votes_count),
+      suggested: not is_nil(option.suggested_by_participant_id),
+      rejected: not is_nil(option.rejected_at),
+      winner: false
+    }
+  end
+
+  defp yes_no_maybe_option_result(value, label, position, votes, active_votes_count) do
+    option_votes = Enum.filter(votes, &(&1.value == value))
+    active_votes = Enum.filter(option_votes, &active_result_vote?/1)
+    votes_count = length(active_votes)
+
+    %{
+      key: "value-#{value}",
+      label: label,
+      position: position,
+      votes_count: votes_count,
+      intensity_count: 0,
+      rejected_votes_count: length(option_votes) - votes_count,
+      percent: vote_percent(votes_count, active_votes_count),
+      suggested: false,
+      rejected: false,
+      winner: false
+    }
+  end
+
+  defp sort_option_results(option_results) do
+    Enum.sort_by(option_results, fn option ->
+      {-option.votes_count, -option.intensity_count, option.position,
+       normalize_label(option.label)}
+    end)
+  end
+
+  defp mark_winner(option_results, 0), do: option_results
+
+  defp mark_winner([winner | rest], _active_votes_count) do
+    [%{winner | winner: true} | rest]
+  end
+
+  defp mark_winner([], _active_votes_count), do: []
+
+  defp rejected_vote_results(votes) do
+    votes
+    |> Enum.reject(&active_result_vote?/1)
+    |> Enum.map(fn vote ->
+      %{
+        id: vote.id,
+        participant_name: result_participant_name(vote.participant),
+        value_label: result_vote_label(vote),
+        reason: vote.rejection_reason || "Sem motivo informado"
+      }
+    end)
+  end
+
+  defp active_result_vote?(%Vote{
+         rejected_at: nil,
+         participant: %EventParticipant{status: "active"},
+         ballot_option: nil
+       }),
+       do: true
+
+  defp active_result_vote?(%Vote{
+         rejected_at: nil,
+         participant: %EventParticipant{status: "active"},
+         ballot_option: %BallotOption{rejected_at: nil}
+       }),
+       do: true
+
+  defp active_result_vote?(_vote), do: false
+
+  defp result_participant_name(%EventParticipant{kind: "user", user: %User{email: email}}),
+    do: email
+
+  defp result_participant_name(%EventParticipant{display_name: display_name})
+       when is_binary(display_name),
+       do: display_name
+
+  defp result_participant_name(_participant), do: "Participante"
+
+  defp result_vote_label(%Vote{ballot_option: %BallotOption{label: label}}), do: label
+  defp result_vote_label(%Vote{value: value}), do: result_value_label(value)
+
+  defp result_value_label("yes"), do: "Sim"
+  defp result_value_label("no"), do: "Nao"
+  defp result_value_label("maybe"), do: "Talvez"
+  defp result_value_label(_value), do: "Valor nao informado"
+
+  defp yes_no_maybe_result_values do
+    [{"yes", "Sim", 0}, {"no", "Nao", 1}, {"maybe", "Talvez", 2}]
+  end
+
+  defp vote_percent(_votes_count, 0), do: 0
+
+  defp vote_percent(votes_count, active_votes_count) do
+    round(votes_count * 100 / active_votes_count)
+  end
+
+  defp sum_result_count(ballot_results, key) do
+    ballot_results
+    |> Enum.map(&Map.fetch!(&1, key))
+    |> Enum.sum()
+  end
+
+  defp empty_event_results(event) do
+    %{
+      event: event,
+      ballot_results: [],
+      ballots_count: 0,
+      active_votes_count: 0,
+      rejected_votes_count: 0
+    }
+    |> put_event_results_summary()
+  end
+
+  defp put_event_results_summary(%{event: event, ballot_results: ballot_results} = results) do
+    Map.put(results, :summary, event_results_summary(event, ballot_results))
+  end
+
+  defp event_results_summary(%Event{} = event, ballot_results) do
+    header =
+      ["Resultado do evento #{event.title}"]
+      |> maybe_append_summary_line(event.location, "Local")
+      |> maybe_append_summary_line(summary_datetime(event.scheduled_at), "Data")
+
+    ballot_lines = Enum.map(ballot_results, &ballot_result_summary_line/1)
+
+    Enum.join(header ++ [""] ++ ballot_lines, "\n")
+  end
+
+  defp maybe_append_summary_line(lines, nil, _label), do: lines
+  defp maybe_append_summary_line(lines, "", _label), do: lines
+  defp maybe_append_summary_line(lines, value, label), do: lines ++ ["#{label}: #{value}"]
+
+  defp summary_datetime(nil), do: nil
+
+  defp summary_datetime(%DateTime{} = datetime) do
+    Calendar.strftime(datetime, "%d/%m/%Y %H:%M")
+  end
+
+  defp ballot_result_summary_line(%{ballot: ballot, winner: nil} = result) do
+    "- #{ballot.title}: sem votos ativos#{summary_rejected_suffix(result)}"
+  end
+
+  defp ballot_result_summary_line(%{ballot: ballot, winner: winner} = result) do
+    details =
+      ["#{winner.votes_count} voto(s)"]
+      |> maybe_append_intensity_detail(winner.intensity_count)
+
+    "- #{ballot.title}: #{winner.label} (#{Enum.join(details, ", ")})#{summary_rejected_suffix(result)}"
+  end
+
+  defp maybe_append_intensity_detail(details, 0), do: details
+
+  defp maybe_append_intensity_detail(details, intensity_count) do
+    details ++ ["#{intensity_count} intenso(s)"]
+  end
+
+  defp summary_rejected_suffix(%{rejected_votes_count: 0}), do: ""
+
+  defp summary_rejected_suffix(%{rejected_votes_count: rejected_votes_count}) do
+    " - #{rejected_votes_count} voto(s) rejeitado(s)"
   end
 
   defp manageable_events_query(user_id) do

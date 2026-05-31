@@ -60,6 +60,7 @@ defmodule EscalimetroWeb.Router do
       live "/events/:event_id/ballots/:id/edit", BallotLive.Form, :edit
       live "/events/:event_id/participants", ParticipantLive.Index, :index
       live "/events/:event_id/moderation", ModerationLive.Index, :index
+      live "/events/:event_id/results", ResultsLive.Show, :show
       live "/events/:event_id/invite", InviteLive.Admin, :show
 
       live "/users/settings", UserLive.Settings, :edit

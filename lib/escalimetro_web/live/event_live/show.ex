@@ -40,6 +40,13 @@ defmodule EscalimetroWeb.EventLive.Show do
 
             <div :if={@can_manage_event?} id="event-admin-actions" class="flex shrink-0 gap-2">
               <.button
+                id="event-results-link"
+                navigate={~p"/events/#{@event}/results"}
+                class="btn btn-soft"
+              >
+                <.icon name="hero-chart-bar" class="size-4" /> Resultados
+              </.button>
+              <.button
                 :if={@event.status != "completed"}
                 navigate={~p"/events/#{@event}/edit"}
                 class="btn btn-soft"
