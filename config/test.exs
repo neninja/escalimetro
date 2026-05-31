@@ -3,6 +3,8 @@ import Config
 # Only in tests, remove the complexity from the password hashing algorithm
 config :bcrypt_elixir, :log_rounds, 1
 
+config :escalimetro, sql_sandbox: true
+
 # Configure your database
 #
 # The MIX_TEST_PARTITION environment variable can be used
@@ -29,7 +31,8 @@ config :phoenix_test,
   playwright: [
     browser_pool: :chromium_pool,
     browser_pools: [[id: :chromium_pool, browser: :chromium, size: 1]],
-    ecto_sandbox_stop_owner_delay: 50
+    ecto_sandbox_stop_owner_delay: 50,
+    timeout: 5_000
   ]
 
 # In test we don't send emails

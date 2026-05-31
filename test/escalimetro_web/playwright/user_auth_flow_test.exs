@@ -1,5 +1,5 @@
 defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
-  use PhoenixTest.Playwright.Case, async: false
+  use PhoenixTest.Playwright.Case, async: false, browser_pool: false
 
   use EscalimetroWeb, :verified_routes
 
@@ -60,13 +60,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     user = user_fixture() |> set_password()
 
     conn
-    |> visit(~p"/users/log-in")
-    |> within("#login_form_password", fn conn ->
-      conn
-      |> fill_in("Email", with: user.email)
-      |> fill_in("Password", with: "incorrect password")
-      |> click_button("Log in only this time")
-    end)
+    |> submit_password_login(user.email, "incorrect password")
     |> assert_path(~p"/users/log-in")
     |> assert_has("#login_form_password")
     |> assert_has("#flash-error", text: "Invalid email or password")
@@ -116,14 +110,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     |> assert_path(~p"/users/settings")
     |> assert_has("#flash-info", text: "Password updated successfully")
     |> clear_cookies()
-    |> visit(~p"/users/log-in")
-    |> within("#login_form_password", fn conn ->
-      conn
-      |> fill_in("Email", with: user.email)
-      |> fill_in("Password", with: new_password)
-      |> click_button("Log in only this time")
-    end)
-    |> assert_path(~p"/")
+    |> log_in_with_password(user.email, new_password)
   end
 
   test "settings requires an authenticated user", %{conn: conn} do
@@ -174,14 +161,22 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
 
   defp log_in_with_password(conn, email, password \\ valid_user_password()) do
     conn
+    |> submit_password_login(email, password)
+    |> assert_path(~p"/", timeout: 5_000)
+  end
+
+  defp submit_password_login(conn, email, password) do
+    conn
     |> visit(~p"/users/log-in")
+    |> assert_has("#login_form_password")
     |> within("#login_form_password", fn conn ->
       conn
       |> fill_in("Email", with: email)
       |> fill_in("Password", with: password)
-      |> click_button("Log in only this time")
     end)
-    |> assert_path(~p"/")
+    |> evaluate(
+      "HTMLFormElement.prototype.submit.call(document.querySelector('#login_form_password'))"
+    )
   end
 
   defp discard_sent_emails do

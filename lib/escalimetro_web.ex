@@ -52,6 +52,10 @@ defmodule EscalimetroWeb do
     quote do
       use Phoenix.LiveView
 
+      if Application.compile_env(:escalimetro, :sql_sandbox) do
+        on_mount EscalimetroWeb.LiveAcceptance
+      end
+
       unquote(html_helpers())
     end
   end
