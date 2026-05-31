@@ -2,7 +2,16 @@ defmodule Escalimetro.EventsTest do
   use Escalimetro.DataCase, async: true
 
   alias Escalimetro.Events
-  alias Escalimetro.Events.{Ballot, BallotOption, Event, EventAdmin, EventParticipant, Vote}
+
+  alias Escalimetro.Events.{
+    Ballot,
+    BallotOption,
+    Event,
+    EventAdmin,
+    EventInvite,
+    EventParticipant,
+    Vote
+  }
 
   import Escalimetro.AccountsFixtures
   import Escalimetro.EventsFixtures
@@ -272,6 +281,93 @@ defmodule Escalimetro.EventsTest do
 
       assert rejected_at
       assert rejected_by_user_id == scope.user.id
+    end
+  end
+
+  describe "invites" do
+    test "rotate_event_invite/2 creates an active invite with a hashed token" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+
+      assert {:ok, %EventInvite{token: token, status: "active"} = invite} =
+               Events.rotate_event_invite(scope, event)
+
+      assert is_binary(token)
+      assert byte_size(invite.token_hash) == 64
+      refute invite.token_hash == token
+      assert Events.get_active_invite_by_token(token).id == invite.id
+      assert Events.get_active_event_invite(scope, event).id == invite.id
+      refute Events.get_active_invite_by_token("invalid-token")
+    end
+
+    test "rotate_event_invite/2 invalidates the previous active invite" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+
+      assert {:ok, first_invite} = Events.rotate_event_invite(scope, event)
+      assert {:ok, second_invite} = Events.rotate_event_invite(scope, event)
+
+      assert first_invite.id != second_invite.id
+      assert Events.get_active_invite_by_token(first_invite.token) == nil
+      assert Events.get_active_invite_by_token(second_invite.token).id == second_invite.id
+
+      assert %EventInvite{status: "invalidated", invalidated_at: invalidated_at} =
+               Repo.get!(EventInvite, first_invite.id)
+
+      assert invalidated_at
+      assert Repo.aggregate(EventInvite, :count) == 2
+    end
+
+    test "invalidate_event_invite/2 invalidates the active invite" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+
+      assert {:ok, invite} = Events.rotate_event_invite(scope, event)
+
+      assert {:ok, %EventInvite{status: "invalidated"}} =
+               Events.invalidate_event_invite(scope, event)
+
+      assert Events.get_active_event_invite(scope, event) == nil
+      assert Events.get_active_invite_by_token(invite.token) == nil
+
+      assert {:error, :invalid_invite} =
+               Events.enter_event_invite(nil, invite, %{display_name: "Visitante"})
+    end
+
+    test "enter_event_invite/3 creates and reuses guest participants" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      assert {:ok, invite} = Events.rotate_event_invite(scope, event)
+
+      assert {:error, changeset} = Events.enter_event_invite(nil, invite, %{display_name: "A"})
+      assert "should be at least 2 character(s)" in errors_on(changeset).display_name
+
+      assert {:ok, %EventParticipant{kind: "guest", display_name: "Visitante"} = participant} =
+               Events.enter_event_invite(nil, invite, %{display_name: "  Visitante  "})
+
+      assert {:ok, %EventParticipant{id: participant_id}} =
+               Events.enter_event_invite(nil, invite, %{display_name: "Visitante"})
+
+      assert participant_id == participant.id
+    end
+
+    test "enter_event_invite/3 creates and reuses authenticated user participants" do
+      owner_scope = user_scope_fixture()
+      event = event_fixture(owner_scope)
+      assert {:ok, invite} = Events.rotate_event_invite(owner_scope, event)
+
+      user = user_fixture()
+      scope = user_scope_fixture(user)
+
+      assert {:ok, %EventParticipant{kind: "user", user_id: user_id} = participant} =
+               Events.enter_event_invite(scope, invite)
+
+      assert user_id == user.id
+
+      assert {:ok, %EventParticipant{id: participant_id}} =
+               Events.enter_event_invite(scope, invite)
+
+      assert participant_id == participant.id
     end
   end
 

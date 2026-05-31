@@ -60,6 +60,7 @@ defmodule EscalimetroWeb.Router do
       live "/events/:event_id/ballots/:id/edit", BallotLive.Form, :edit
       live "/events/:event_id/participants", ParticipantLive.Index, :index
       live "/events/:event_id/moderation", ModerationLive.Index, :index
+      live "/events/:event_id/invite", InviteLive.Admin, :show
 
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
@@ -73,6 +74,7 @@ defmodule EscalimetroWeb.Router do
 
     live_session :current_user,
       on_mount: [{EscalimetroWeb.UserAuth, :mount_current_scope}] do
+      live "/join/:token", InviteLive.Join, :show
       live "/events/public/:participant_token", ParticipantLive.Event, :show
 
       live "/users/register", UserLive.Registration, :new

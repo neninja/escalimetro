@@ -142,6 +142,9 @@ defmodule EscalimetroWeb.EventLive.Show do
               <.button navigate={~p"/events/#{@event}/moderation"} class="btn btn-soft">
                 <.icon name="hero-shield-check" class="size-4" /> Moderacao
               </.button>
+              <.button navigate={~p"/events/#{@event}/invite"} class="btn btn-soft">
+                <.icon name="hero-qr-code" class="size-4" /> Convite
+              </.button>
             </div>
           </div>
 

@@ -4,7 +4,7 @@ defmodule Escalimetro.Events.Event do
   import Ecto.Changeset
 
   alias Escalimetro.Accounts.User
-  alias Escalimetro.Events.{Ballot, EventAdmin, EventParticipant, Vote}
+  alias Escalimetro.Events.{Ballot, EventAdmin, EventInvite, EventParticipant, Vote}
 
   @statuses ~w(draft open completed)
 
@@ -20,6 +20,7 @@ defmodule Escalimetro.Events.Event do
     has_many :event_admins, EventAdmin
     has_many :admins, through: [:event_admins, :user]
     has_many :ballots, Ballot
+    has_many :event_invites, EventInvite
     has_many :participants, EventParticipant
     has_many :votes, Vote
 
