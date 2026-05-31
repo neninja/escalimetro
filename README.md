@@ -16,7 +16,7 @@
 mix setup
 ```
 
-> Sugestão de dados iniciais com `mix stock.setup` e resetar com `mix stock.reset`
+> Sugestão de dados iniciais com `mix example.setup` e resetar com `mix fresh`
 
 ## Execução
 

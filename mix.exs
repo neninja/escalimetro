@@ -78,18 +78,23 @@ defmodule Escalimetro.MixProject do
   # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
+      seed: ["run priv/repo/seeds.exs"],
+      "ecto.setup": ["ecto.create", "ecto.migrate", "seed"],
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
-      "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
+      "example.setup": ["run priv/repo/example.exs"],
+      "example.reset": ["ecto.reset", "example.setup"],
       test: ["ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
-      "assets.build": ["compile", "tailwind escalimetro", "esbuild escalimetro"],
+      "assets.build": ["compile", "tailwind bazar", "esbuild bazar"],
       "assets.deploy": [
-        "tailwind escalimetro --minify",
-        "esbuild escalimetro --minify",
+        "tailwind bazar --minify",
+        "esbuild bazar --minify",
         "phx.digest"
       ],
-      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"]
+      precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
+      fresh: ["example.reset"],
+      server: ["phx.server"]
     ]
   end
 end
