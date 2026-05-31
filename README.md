@@ -7,8 +7,15 @@
 
 - *Elixir 1.18.1* e *Erlang/OTP 26*
 - *Node 24.1.0* e NPM *10.9.0*
+- *Docker* com *Docker Compose*
 
 ## Configuração
+
+- Inicie o PostgreSQL local
+
+```shell
+docker compose up -d db
+```
 
 - Baixe as dependências, build, migrations e seed
 
