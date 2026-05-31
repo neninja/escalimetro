@@ -38,7 +38,7 @@ defmodule Escalimetro.Events.Ballot do
       :position,
       :closed_at
     ])
-    |> validate_required([:event_id, :title, :kind, :status, :position])
+    |> validate_required([:event_id, :title, :kind, :allow_sugestion, :status, :position])
     |> validate_length(:title, max: 160)
     |> validate_length(:description, max: 5_000)
     |> validate_inclusion(:kind, @kinds)
@@ -54,6 +54,14 @@ defmodule Escalimetro.Events.Ballot do
     ballot
     |> change(status: "closed", closed_at: closed_at)
     |> validate_required([:event_id, :title, :kind, :status, :position, :closed_at])
+    |> validate_inclusion(:status, @statuses)
+    |> check_constraint(:status, name: :ballots_status_check)
+  end
+
+  def reopen_changeset(ballot) do
+    ballot
+    |> change(status: "open", closed_at: nil)
+    |> validate_required([:event_id, :title, :kind, :status, :position])
     |> validate_inclusion(:status, @statuses)
     |> check_constraint(:status, name: :ballots_status_check)
   end

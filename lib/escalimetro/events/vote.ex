@@ -49,9 +49,16 @@ defmodule Escalimetro.Events.Vote do
     |> cast(attrs, [:rejection_reason])
     |> put_change(:rejected_at, DateTime.utc_now(:second))
     |> put_change(:rejected_by_user_id, rejected_by_user_id)
-    |> validate_required([:rejected_at, :rejected_by_user_id, :rejection_reason])
+    |> validate_required([:rejected_at, :rejected_by_user_id])
     |> validate_length(:rejection_reason, max: 500)
     |> foreign_key_constraint(:rejected_by_user_id)
+  end
+
+  def restore_changeset(vote) do
+    vote
+    |> change(rejected_at: nil, rejected_by_user_id: nil, rejection_reason: nil)
+    |> unique_constraint(:ballot_option_id, name: :votes_active_option_unique_index)
+    |> unique_constraint(:participant_id, name: :votes_active_value_unique_index)
   end
 
   defp validate_option_or_value(changeset) do

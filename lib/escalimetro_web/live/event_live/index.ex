@@ -63,7 +63,10 @@ defmodule EscalimetroWeb.EventLive.Index do
               </span>
             </div>
             <div id="draft-events" phx-update="stream" class="space-y-3">
-              <p class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-4 text-sm text-base-content/55">
+              <p
+                id="draft-events-empty"
+                class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-4 text-sm text-base-content/55"
+              >
                 Sem rascunhos.
               </p>
               <.event_card :for={{id, event} <- @streams.draft_events} id={id} event={event} />
@@ -80,7 +83,10 @@ defmodule EscalimetroWeb.EventLive.Index do
               </span>
             </div>
             <div id="open-events" phx-update="stream" class="space-y-3">
-              <p class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-4 text-sm text-base-content/55">
+              <p
+                id="open-events-empty"
+                class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-4 text-sm text-base-content/55"
+              >
                 Sem eventos abertos.
               </p>
               <.event_card :for={{id, event} <- @streams.open_events} id={id} event={event} />
@@ -97,7 +103,10 @@ defmodule EscalimetroWeb.EventLive.Index do
               </span>
             </div>
             <div id="completed-events" phx-update="stream" class="space-y-3">
-              <p class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-4 text-sm text-base-content/55">
+              <p
+                id="completed-events-empty"
+                class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-4 text-sm text-base-content/55"
+              >
                 Sem eventos concluidos.
               </p>
               <.event_card :for={{id, event} <- @streams.completed_events} id={id} event={event} />

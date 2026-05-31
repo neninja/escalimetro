@@ -2,7 +2,7 @@ defmodule Escalimetro.EventsTest do
   use Escalimetro.DataCase, async: true
 
   alias Escalimetro.Events
-  alias Escalimetro.Events.{Ballot, Event, EventAdmin, Vote}
+  alias Escalimetro.Events.{Ballot, BallotOption, Event, EventAdmin, EventParticipant, Vote}
 
   import Escalimetro.AccountsFixtures
   import Escalimetro.EventsFixtures
@@ -109,6 +109,113 @@ defmodule Escalimetro.EventsTest do
       assert "can't be blank" in errors_on(changeset).title
       assert "is invalid" in errors_on(changeset).kind
     end
+
+    test "multiple choice ballots require at least two options" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+
+      assert {:error, changeset} =
+               Events.create_ballot(scope, event, %{
+                 title: "Escolha uma opcao",
+                 kind: "multiple_choice",
+                 options: [%{label: "Unica"}]
+               })
+
+      assert "must have at least two options" in errors_on(changeset).options
+    end
+
+    test "create_ballot/3 creates ordered multiple choice options" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+
+      assert {:ok, ballot} =
+               Events.create_ballot(scope, event, %{
+                 title: "Escolha o horario",
+                 kind: "multiple_choice",
+                 allow_sugestion: true,
+                 options: [
+                   %{label: "Manha", position: 1},
+                   %{label: "Noite", position: 0}
+                 ]
+               })
+
+      assert ballot.allow_sugestion
+      assert Enum.map(ballot.options, & &1.label) == ["Noite", "Manha"]
+    end
+
+    test "yes_no_maybe ballots do not require custom options" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+
+      assert {:ok, ballot} =
+               Events.create_ballot(scope, event, %{
+                 title: "Devemos aprovar?",
+                 kind: "yes_no_maybe",
+                 allow_sugestion: true
+               })
+
+      assert ballot.kind == "yes_no_maybe"
+      assert ballot.options == []
+    end
+
+    test "update_ballot/3 updates editable options" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event)
+      [first_option, second_option] = ballot.options
+
+      assert {:ok, ballot} =
+               Events.update_ballot(scope, ballot, %{
+                 title: "Horario atualizado",
+                 options: %{
+                   "0" => %{"id" => first_option.id, "label" => "Tarde"},
+                   "1" => %{"id" => second_option.id, "label" => "Noite"},
+                   "2" => %{"label" => "Manha"}
+                 }
+               })
+
+      assert ballot.title == "Horario atualizado"
+      assert Enum.map(ballot.options, & &1.label) == ["Tarde", "Noite", "Manha"]
+    end
+
+    test "close_ballot/2 and reopen_ballot/2 only affect one ballot" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event)
+      other_ballot = ballot_fixture(scope, event)
+
+      assert {:ok, %Ballot{status: "closed", closed_at: closed_at}} =
+               Events.close_ballot(scope, ballot)
+
+      assert closed_at
+      assert Repo.get!(Ballot, other_ballot.id).status == "open"
+
+      assert {:ok, %Ballot{status: "open", closed_at: nil}} =
+               Events.reopen_ballot(scope, Repo.get!(Ballot, ballot.id))
+    end
+
+    test "reopen_ballot/2 is blocked for completed events" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event)
+
+      assert {:ok, closed_ballot} = Events.close_ballot(scope, ballot)
+      assert {:ok, _event} = Events.complete_event(scope, event)
+
+      assert {:error, :completed_event} = Events.reopen_ballot(scope, closed_ballot)
+    end
+
+    test "closed ballot does not accept new votes" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event, %{kind: "yes_no_maybe"})
+      participant = event_participant_fixture(scope, event)
+
+      assert {:ok, closed_ballot} = Events.close_ballot(scope, ballot)
+
+      assert {:error, :closed_ballot} =
+               Events.create_vote(scope, event, participant, closed_ballot, %{value: "yes"})
+    end
   end
 
   describe "participants" do
@@ -120,6 +227,51 @@ defmodule Escalimetro.EventsTest do
                Events.create_event_participant(scope, event, %{kind: "guest", status: "active"})
 
       assert "can't be blank" in errors_on(changeset).display_name
+    end
+
+    test "list_participants/2 returns vote counts and separates rejected votes" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event, %{kind: "yes_no_maybe"})
+      participant = event_participant_fixture(scope, event)
+      rejected_participant = event_participant_fixture(scope, event)
+
+      assert {:ok, _vote} = Events.create_vote(scope, event, participant, ballot, %{value: "yes"})
+
+      assert {:ok, vote} =
+               Events.create_vote(scope, event, rejected_participant, ballot, %{value: "no"})
+
+      assert {:ok, _vote} = Events.reject_vote(scope, vote, %{})
+
+      participants = Events.list_participants(scope, event)
+
+      assert %EventParticipant{accepted_votes_count: 1, rejected_votes_count: 0} =
+               Enum.find(participants, &(&1.id == participant.id))
+
+      assert %EventParticipant{accepted_votes_count: 0, rejected_votes_count: 1} =
+               Enum.find(participants, &(&1.id == rejected_participant.id))
+    end
+
+    test "invalidate_participant/2 marks participant and rejects active votes" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event, %{kind: "yes_no_maybe"})
+      participant = event_participant_fixture(scope, event)
+      assert {:ok, vote} = Events.create_vote(scope, event, participant, ballot, %{value: "yes"})
+
+      assert {:ok, %EventParticipant{status: "invalidated", invalidated_at: invalidated_at}} =
+               Events.invalidate_participant(scope, participant)
+
+      assert invalidated_at
+
+      assert %Vote{
+               rejected_at: rejected_at,
+               rejected_by_user_id: rejected_by_user_id,
+               rejection_reason: "Participante invalidado"
+             } = Repo.get!(Vote, vote.id)
+
+      assert rejected_at
+      assert rejected_by_user_id == scope.user.id
     end
   end
 
@@ -167,6 +319,71 @@ defmodule Escalimetro.EventsTest do
                Events.create_vote(scope, completed_event, participant, closed_ballot, %{
                  value: "yes"
                })
+    end
+
+    test "reject_vote/3 accepts optional reason and restore_vote/2 clears rejection" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event, %{kind: "yes_no_maybe"})
+      participant = event_participant_fixture(scope, event)
+      assert {:ok, vote} = Events.create_vote(scope, event, participant, ballot, %{value: "yes"})
+
+      assert {:ok,
+              %Vote{
+                rejected_at: rejected_at,
+                rejected_by_user_id: rejected_by_user_id,
+                rejection_reason: nil
+              } = rejected_vote} = Events.reject_vote(scope, vote, %{})
+
+      assert rejected_at
+      assert rejected_by_user_id == scope.user.id
+
+      assert {:ok, %Vote{rejected_at: nil, rejected_by_user_id: nil, rejection_reason: nil}} =
+               Events.restore_vote(scope, rejected_vote)
+    end
+
+    test "reject_vote/3 and restore_vote/2 are blocked for completed events" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event, %{kind: "yes_no_maybe"})
+      participant = event_participant_fixture(scope, event)
+      assert {:ok, vote} = Events.create_vote(scope, event, participant, ballot, %{value: "yes"})
+      assert {:ok, _event} = Events.complete_event(scope, event)
+
+      assert {:error, :completed_event} = Events.reject_vote(scope, vote, %{})
+      assert {:error, :completed_event} = Events.restore_vote(scope, vote)
+    end
+
+    test "restore_vote/2 is blocked for invalidated participants" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event, %{kind: "yes_no_maybe"})
+      participant = event_participant_fixture(scope, event)
+      assert {:ok, vote} = Events.create_vote(scope, event, participant, ballot, %{value: "yes"})
+
+      assert {:ok, rejected_vote} =
+               Events.reject_vote(scope, vote, %{rejection_reason: "Duplicado"})
+
+      assert {:ok, _participant} = Events.invalidate_participant(scope, participant)
+
+      assert {:error, :invalidated_participant} = Events.restore_vote(scope, rejected_vote)
+    end
+
+    test "suggest_ballot_option/4 requires suggestions enabled" do
+      scope = user_scope_fixture()
+      event = event_fixture(scope)
+      ballot = ballot_fixture(scope, event, %{allow_sugestion: true})
+      participant = event_participant_fixture(scope, event)
+
+      assert {:ok, %BallotOption{suggested_by_participant_id: participant_id}} =
+               Events.suggest_ballot_option(event, participant, ballot, %{label: "Sugestao"})
+
+      assert participant_id == participant.id
+
+      closed_ballot = ballot_fixture(scope, event, %{allow_sugestion: false})
+
+      assert {:error, :suggestions_disabled} =
+               Events.suggest_ballot_option(event, participant, closed_ballot, %{label: "Outra"})
     end
   end
 end
