@@ -65,7 +65,7 @@ Focado na interação em tempo real e na facilidade de uso em dispositivos móve
 
 - Votação Multiusuário: O participante pode registrar seu voto nas opções de cada pauta.
 - Atualização em Tempo Real: Os votos de todos os participantes devem ser computados e refletidos na tela de todos os usuários conectados instantaneamente, sem necessidade de atualizar a página.
-- Opinar e Sugerir em pautas abertas: Permitir que o administrador crie uma pauta do tipo "Sugestões", onde os participantes podem digitar novas opções (ex: sugerir um sabor de pizza que não estava na lista inicial). Os outros participantes podem votar nas sugestões enviadas por colegas.
+- Opinar e Sugerir em pautas abertas: Permitir que o administrador habilite `allow_sugestion` em uma pauta, onde os participantes podem digitar novas opções (ex: sugerir um sabor de pizza que não estava na lista inicial). Os outros participantes podem votar nas sugestões enviadas por colegas.
 - Justificativa de Voto: Atendendo ao cenário de escalas de trabalho, o participante pode adicionar um breve comentário/justificativa ao lado do seu voto (ex: "Não posso na terça pois tenho faculdade").
 
 ### Relatórios e Resultados (Resultado Óbvio)
