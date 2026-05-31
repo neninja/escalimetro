@@ -19,9 +19,18 @@ config :escalimetro, Escalimetro.Repo,
 # We don't run a server during test. If one is required,
 # you can enable the server option below.
 config :escalimetro, EscalimetroWeb.Endpoint,
+  url: [host: "localhost", port: 4002],
   http: [ip: {127, 0, 0, 1}, port: 4002],
   secret_key_base: "NJdsmHfeOYgX0Tw2sYxCnYYZNN61QzZfK/+2nXa1oq5g8opsxCY2HaKcHp6jOXWK",
-  server: false
+  server: true
+
+config :phoenix_test,
+  otp_app: :escalimetro,
+  playwright: [
+    browser_pool: :chromium_pool,
+    browser_pools: [[id: :chromium_pool, browser: :chromium, size: 1]],
+    ecto_sandbox_stop_owner_delay: 50
+  ]
 
 # In test we don't send emails
 config :escalimetro, Escalimetro.Mailer, adapter: Swoosh.Adapters.Test
