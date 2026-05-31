@@ -36,7 +36,37 @@ defmodule EscalimetroWeb.Layouts do
   slot :inner_block, required: true
 
   def app(assigns) do
+    assigns = assign(assigns, :stop_impersonation_form, to_form(%{}, as: :impersonation))
+
     ~H"""
+    <div
+      :if={impersonating?(@current_scope)}
+      id="impersonation-banner"
+      class="flex flex-col gap-3 border-b border-amber-300/60 bg-amber-100 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8"
+    >
+      <div class="flex items-center gap-2">
+        <.icon name="hero-eye" class="size-4 shrink-0" />
+        <p>
+          Impersonando <strong>{@current_scope.user.email}</strong>
+          por <strong>{@current_scope.impersonator_user.email}</strong>
+        </p>
+      </div>
+      <.form
+        for={@stop_impersonation_form}
+        id="stop-impersonation-form"
+        action={~p"/backoffice/impersonation"}
+        method="delete"
+      >
+        <button
+          id="stop-impersonation-button"
+          type="submit"
+          class="inline-flex items-center justify-center gap-2 rounded-md border border-amber-900/20 bg-white/70 px-3 py-1.5 text-sm font-semibold text-amber-950 transition hover:-translate-y-0.5 hover:bg-white"
+        >
+          <.icon name="hero-arrow-uturn-left" class="size-4" /> Encerrar impersonacao
+        </button>
+      </.form>
+    </div>
+
     <header class="navbar px-4 sm:px-6 lg:px-8">
       <div class="flex-1">
         <a href="/" class="flex-1 flex w-fit items-center gap-2">
@@ -73,6 +103,9 @@ defmodule EscalimetroWeb.Layouts do
     <.flash_group flash={@flash} />
     """
   end
+
+  defp impersonating?(%{impersonator_user: %{}}), do: true
+  defp impersonating?(_current_scope), do: false
 
   @doc """
   Shows the flash group with standard titles and content.

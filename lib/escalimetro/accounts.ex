@@ -60,6 +60,12 @@ defmodule Escalimetro.Accounts do
   """
   def get_user!(id), do: Repo.get!(User, id)
 
+  @doc """
+  Returns whether the user can access system backoffice features.
+  """
+  def system_admin?(%User{system_admin: true}), do: true
+  def system_admin?(_user), do: false
+
   ## User registration
 
   @doc """

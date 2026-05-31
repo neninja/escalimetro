@@ -49,8 +49,15 @@ defmodule EscalimetroWeb.UserAuth do
     user_token = get_session(conn, :user_token)
     user_token && Accounts.delete_user_session_token(user_token)
 
+    impersonator_user_token = get_session(conn, :impersonator_user_token)
+    impersonator_user_token && Accounts.delete_user_session_token(impersonator_user_token)
+
     if live_socket_id = get_session(conn, :live_socket_id) do
       EscalimetroWeb.Endpoint.broadcast(live_socket_id, "disconnect", %{})
+    end
+
+    if impersonator_live_socket_id = get_session(conn, :impersonator_live_socket_id) do
+      EscalimetroWeb.Endpoint.broadcast(impersonator_live_socket_id, "disconnect", %{})
     end
 
     conn
@@ -68,7 +75,7 @@ defmodule EscalimetroWeb.UserAuth do
     with {token, conn} <- ensure_user_token(conn),
          {user, token_inserted_at} <- Accounts.get_user_by_session_token(token) do
       conn
-      |> assign(:current_scope, Scope.for_user(user))
+      |> assign(:current_scope, Scope.for_user(user, impersonator_user(conn)))
       |> maybe_reissue_user_session_token(user, token_inserted_at)
     else
       nil -> assign(conn, :current_scope, Scope.for_user(nil))
@@ -169,6 +176,50 @@ defmodule EscalimetroWeb.UserAuth do
   end
 
   @doc """
+  Starts an impersonated session for a support administrator.
+  """
+  def impersonate_user(conn, user) do
+    impersonator_user_token =
+      get_session(conn, :impersonator_user_token) || get_session(conn, :user_token)
+
+    target_token = Accounts.generate_user_session_token(user)
+
+    if live_socket_id = get_session(conn, :live_socket_id) do
+      EscalimetroWeb.Endpoint.broadcast(live_socket_id, "disconnect", %{})
+    end
+
+    conn
+    |> put_session(:impersonator_user_token, impersonator_user_token)
+    |> put_session(:impersonator_live_socket_id, user_session_topic(impersonator_user_token))
+    |> put_token_in_session(target_token)
+  end
+
+  @doc """
+  Restores the original support administrator session.
+  """
+  def stop_impersonating_user(conn) do
+    target_token = get_session(conn, :user_token)
+    target_token && Accounts.delete_user_session_token(target_token)
+
+    if live_socket_id = get_session(conn, :live_socket_id) do
+      EscalimetroWeb.Endpoint.broadcast(live_socket_id, "disconnect", %{})
+    end
+
+    impersonator_user_token = get_session(conn, :impersonator_user_token)
+
+    conn
+    |> delete_session(:impersonator_user_token)
+    |> delete_session(:impersonator_live_socket_id)
+    |> put_token_in_session(impersonator_user_token)
+  end
+
+  def impersonating?(%Plug.Conn{} = conn),
+    do: is_binary(get_session(conn, :impersonator_user_token))
+
+  def impersonating?(%Scope{impersonator_user: %Accounts.User{}}), do: true
+  def impersonating?(_scope_or_conn), do: false
+
+  @doc """
   Disconnects existing sockets for the given tokens.
   """
   def disconnect_sessions(tokens) do
@@ -252,9 +303,33 @@ defmodule EscalimetroWeb.UserAuth do
           Accounts.get_user_by_session_token(user_token)
         end || {nil, nil}
 
-      Scope.for_user(user)
+      Scope.for_user(user, impersonator_user(session))
     end)
   end
+
+  defp impersonator_user(%Plug.Conn{} = conn) do
+    conn
+    |> get_session(:impersonator_user_token)
+    |> impersonator_user_by_token()
+  end
+
+  defp impersonator_user(%{} = session) do
+    session
+    |> Map.get("impersonator_user_token")
+    |> impersonator_user_by_token()
+  end
+
+  defp impersonator_user_by_token(token) when is_binary(token) do
+    with {%Accounts.User{} = user, _token_inserted_at} <-
+           Accounts.get_user_by_session_token(token),
+         true <- Accounts.system_admin?(user) do
+      user
+    else
+      _other -> nil
+    end
+  end
+
+  defp impersonator_user_by_token(_token), do: nil
 
   @doc "Returns the path to redirect to after log in."
   # the user was already logged in, redirect to settings

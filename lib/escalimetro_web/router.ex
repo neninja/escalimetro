@@ -62,10 +62,14 @@ defmodule EscalimetroWeb.Router do
       live "/events/:event_id/moderation", ModerationLive.Index, :index
       live "/events/:event_id/results", ResultsLive.Show, :show
       live "/events/:event_id/invite", InviteLive.Admin, :show
+      live "/backoffice", BackofficeLive.Dashboard, :index
 
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
+
+    post "/backoffice/users/:id/impersonate", Backoffice.UserImpersonationController, :create
+    delete "/backoffice/impersonation", Backoffice.UserImpersonationController, :delete
 
     post "/users/update-password", UserSessionController, :update_password
   end

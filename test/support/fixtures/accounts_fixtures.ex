@@ -41,6 +41,14 @@ defmodule Escalimetro.AccountsFixtures do
     user
   end
 
+  def system_admin_fixture(attrs \\ %{}) do
+    user = user_fixture(attrs)
+
+    user
+    |> Ecto.Changeset.change(system_admin: true)
+    |> Escalimetro.Repo.update!()
+  end
+
   def user_scope_fixture do
     user = user_fixture()
     user_scope_fixture(user)
