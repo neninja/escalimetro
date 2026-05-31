@@ -1,0 +1,182 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  MIX_ENV: test
+
+jobs:
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Erlang/OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26"
+          elixir-version: "1.18"
+
+      - name: Restore Mix cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-format-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-format-
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+  deps:
+    name: Dependencies
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Erlang/OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26"
+          elixir-version: "1.18"
+
+      - name: Restore Mix cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-deps-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-deps-
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check unused dependencies
+        run: mix deps.unlock --check-unused
+
+  compile:
+    name: Compile
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Erlang/OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26"
+          elixir-version: "1.18"
+
+      - name: Restore Mix cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-compile-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-compile-
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile with warnings as errors
+        run: mix compile --warnings-as-errors
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Erlang/OTP and Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: "26"
+          elixir-version: "1.18"
+
+      - name: Restore Mix cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-test-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-test-
+            ${{ runner.os }}-mix-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: assets/package-lock.json
+
+      - name: Install npm dependencies
+        run: npm --prefix assets ci
+
+      - name: Build assets
+        run: mix assets.build
+
+      - name: Restore Playwright browsers cache
+        uses: actions/cache@v5
+        id: playwright-browsers-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('assets/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright system dependencies
+        run: npm --prefix assets exec playwright install-deps chromium
+
+      - name: Install Playwright browser
+        if: steps.playwright-browsers-cache.outputs.cache-hit != 'true'
+        run: npm --prefix assets exec playwright install chromium
+
+      - name: Run tests
+        run: mix test
