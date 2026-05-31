@@ -31,6 +31,8 @@ defmodule EscalimetroWeb.Layouts do
     default: nil,
     doc: "the current [scope](https://hexdocs.pm/phoenix/scopes.html)"
 
+  attr :container_class, :any, default: "mx-auto max-w-2xl space-y-4"
+
   slot :inner_block, required: true
 
   def app(assigns) do
@@ -63,7 +65,7 @@ defmodule EscalimetroWeb.Layouts do
     </header>
 
     <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">
+      <div class={@container_class}>
         {render_slot(@inner_block)}
       </div>
     </main>

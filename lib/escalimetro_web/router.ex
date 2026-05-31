@@ -52,6 +52,11 @@ defmodule EscalimetroWeb.Router do
 
     live_session :require_authenticated_user,
       on_mount: [{EscalimetroWeb.UserAuth, :require_authenticated}] do
+      live "/events", EventLive.Index, :index
+      live "/events/new", EventLive.Form, :new
+      live "/events/:id", EventLive.Show, :show
+      live "/events/:id/edit", EventLive.Form, :edit
+
       live "/users/settings", UserLive.Settings, :edit
       live "/users/settings/confirm-email/:token", UserLive.Settings, :confirm_email
     end
