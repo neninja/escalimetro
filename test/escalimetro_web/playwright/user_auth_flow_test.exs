@@ -72,7 +72,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     discard_sent_emails()
 
     conn
-    |> log_in_with_password(user.email)
+    |> log_in_with_magic_link(user)
     |> visit(~p"/users/settings")
     |> within("#email_form", fn conn ->
       conn
@@ -99,7 +99,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     new_password = "new valid password!"
 
     conn
-    |> log_in_with_password(user.email)
+    |> log_in_with_magic_link(user)
     |> visit(~p"/users/settings")
     |> within("#password_form", fn conn ->
       conn
@@ -109,8 +109,8 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     end)
     |> assert_path(~p"/users/settings")
     |> assert_has("#flash-info", text: "Password updated successfully")
-    |> clear_cookies()
-    |> log_in_with_password(user.email, new_password)
+
+    assert Accounts.get_user_by_email_and_password(user.email, new_password)
   end
 
   test "settings requires an authenticated user", %{conn: conn} do
@@ -163,6 +163,16 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     conn
     |> submit_password_login(email, password)
     |> assert_path(~p"/", timeout: 5_000)
+  end
+
+  defp log_in_with_magic_link(conn, user) do
+    {token, _hashed_token} = generate_user_magic_link_token(user)
+
+    conn
+    |> visit(~p"/users/log-in/#{token}")
+    |> assert_has("#login_form")
+    |> click_button("Log me in only this time")
+    |> assert_path(~p"/")
   end
 
   defp submit_password_login(conn, email, password) do
