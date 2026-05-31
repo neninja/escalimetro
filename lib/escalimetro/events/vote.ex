@@ -10,6 +10,7 @@ defmodule Escalimetro.Events.Vote do
 
   schema "votes" do
     field :value, :string
+    field :intensity, :boolean, default: false
     field :justification, :string
     field :rejected_at, :utc_datetime
     field :rejection_reason, :string
@@ -27,7 +28,14 @@ defmodule Escalimetro.Events.Vote do
 
   def changeset(vote, attrs) do
     vote
-    |> cast(attrs, [:ballot_option_id, :value, :justification, :rejected_at, :rejection_reason])
+    |> cast(attrs, [
+      :ballot_option_id,
+      :value,
+      :intensity,
+      :justification,
+      :rejected_at,
+      :rejection_reason
+    ])
     |> validate_required([:event_id, :ballot_id, :participant_id])
     |> validate_length(:justification, max: 2_000)
     |> validate_length(:rejection_reason, max: 500)
@@ -42,6 +50,7 @@ defmodule Escalimetro.Events.Vote do
     |> unique_constraint(:participant_id, name: :votes_active_value_unique_index)
     |> check_constraint(:value, name: :votes_value_check)
     |> check_constraint(:ballot_option_id, name: :votes_option_or_value_check)
+    |> check_constraint(:intensity, name: :votes_intensity_requires_option_check)
   end
 
   def reject_changeset(vote, rejected_by_user_id, attrs) do

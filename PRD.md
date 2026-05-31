@@ -14,6 +14,7 @@ Sistema web com agrupamentos de multiplas votações em um único evento. Usuár
 - Convidado: pessoa sem conta
 - Participante: Usuário ou convidado que está participando do evento
 - Usuário administrativo ou participante administrativo: Usuário com permissões administrativas para editar o evento
+- Intensidade de voto: marcação opcional em votos de múltipla escolha para indicar que o participante quer muito aquela opção
 
 ## Publico-Alvo
 
@@ -45,7 +46,7 @@ Sistema web com agrupamentos de multiplas votações em um único evento. Usuár
 
 - Criação de Evento: Usuário pode criar um novo evento definindo dados básicos: Título, Descrição, Data/Horário previstos (opcional) e Local (opcional).
 - Criação de Pautas/Votações: Dentro de um evento, o usuário administrativo pode criar múltiplas pautas. Cada pauta deve aceitar um tipo de votação específico:
-  - Opções múltiplas (ex: Sabores de pizza).
+  - Opções múltiplas (ex: Sabores de pizza), com suporte a intensidade de voto para o participante marcar que quer muito a opção escolhida.
   - Sim/Não/Talvez (ex: Presença ou disponibilidade de data).
 - Edição de Evento e Pautas: Usuário administrativo pode allterar dados do evento ou das pautas.
 - Conciliação de votos: Usuário administrativo pode rejeitar votos, cujo é exibido de maneira transparente nos relatórios.
@@ -64,6 +65,7 @@ Sistema web com agrupamentos de multiplas votações em um único evento. Usuár
 Focado na interação em tempo real e na facilidade de uso em dispositivos móveis.
 
 - Votação Multiusuário: O participante pode registrar seu voto nas opções de cada pauta.
+- Intensidade em votos de múltipla escolha: Ao votar em uma pauta de opções múltiplas, o participante pode marcar um checkbox indicando "quero muito esta opção". Essa marcação deve ser opcional, vinculada ao voto escolhido e não deve existir para votações Sim/Não/Talvez.
 - Atualização em Tempo Real: Os votos de todos os participantes devem ser computados e refletidos na tela de todos os usuários conectados instantaneamente, sem necessidade de atualizar a página.
 - Opinar e Sugerir em pautas abertas: Permitir que o administrador habilite `allow_sugestion` em uma pauta, onde os participantes podem digitar novas opções (ex: sugerir um sabor de pizza que não estava na lista inicial). Os outros participantes podem votar nas sugestões enviadas por colegas.
 - Justificativa de Voto: Atendendo ao cenário de escalas de trabalho, o participante pode adicionar um breve comentário/justificativa ao lado do seu voto (ex: "Não posso na terça pois tenho faculdade").
@@ -71,6 +73,7 @@ Focado na interação em tempo real e na facilidade de uso em dispositivos móve
 ### Relatórios e Resultados (Resultado Óbvio)
 
 - Visualização Clara de Votos (Visão Geral): Uma tela simples que destaca visualmente a opção mais votada de cada pauta (ex: a data vencedora, o filme escolhido).
+- Ordenação inteligente por intensidade: Em pautas de múltipla escolha, relatórios devem exibir a quantidade de votos com intensidade por opção e podem usar essa informação como critério de desempate ou ordenação secundária quando duas opções tiverem totais próximos ou iguais.
 - Extração de Relatório Consolidado: Um botão para o administrador gerar um resumo em formato de texto amigável ou imagem formatada para ser copiado e colado diretamente no WhatsApp (ex: "Resultado do Evento X: Local: Salão, Sabor Vencedor: Calabresa, Horário: 20h").
 
 ### Backoffice

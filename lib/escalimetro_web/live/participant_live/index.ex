@@ -133,6 +133,7 @@ defmodule EscalimetroWeb.ParticipantLive.Index do
   def mount(%{"event_id" => event_id}, _session, socket) do
     case fetch_event(socket, event_id) do
       {:ok, event} ->
+        if connected?(socket), do: Events.subscribe_event(event)
         {:ok, assign_participants(assign(socket, :event, event))}
 
       :error ->
@@ -157,6 +158,11 @@ defmodule EscalimetroWeb.ParticipantLive.Index do
       _other ->
         {:noreply, put_flash(socket, :error, "Nao foi possivel invalidar participante.")}
     end
+  end
+
+  @impl true
+  def handle_info({:event_changed, _event_name, _event_id}, socket) do
+    {:noreply, assign_participants(socket)}
   end
 
   defp assign_participants(socket) do
