@@ -11,13 +11,13 @@ defmodule EscalimetroWeb.UserLive.Registration do
       <div class="mx-auto max-w-sm">
         <div class="text-center">
           <.header>
-            Register for an account
+            Criar conta
             <:subtitle>
-              Already registered?
+              Ja tem cadastro?
               <.link navigate={~p"/users/log-in"} class="font-semibold text-brand hover:underline">
-                Log in
+                Entrar
               </.link>
-              to your account now.
+              agora.
             </:subtitle>
           </.header>
         </div>
@@ -33,8 +33,8 @@ defmodule EscalimetroWeb.UserLive.Registration do
             phx-mounted={JS.focus()}
           />
 
-          <.button phx-disable-with="Creating account..." class="btn btn-primary w-full">
-            Create an account
+          <.button phx-disable-with="Criando conta..." class="btn btn-primary w-full">
+            Criar conta
           </.button>
         </.form>
       </div>
@@ -68,7 +68,7 @@ defmodule EscalimetroWeb.UserLive.Registration do
          socket
          |> put_flash(
            :info,
-           "An email was sent to #{user.email}, please access it to confirm your account."
+           "Enviamos um email para #{user.email}. Acesse o link para confirmar sua conta."
          )
          |> push_navigate(to: ~p"/users/log-in")}
 

@@ -98,7 +98,7 @@ defmodule EscalimetroWeb.Playwright.ResultsFlowTest do
     session
     |> visit(~p"/users/log-in/#{token}")
     |> assert_has("#login_form")
-    |> click_button("Log me in only this time")
-    |> assert_path(~p"/", timeout: 5_000)
+    |> click_button("Entrar apenas desta vez")
+    |> assert_path(~p"/events", timeout: 5_000)
   end
 end

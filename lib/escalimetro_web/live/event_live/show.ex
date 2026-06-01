@@ -47,21 +47,31 @@ defmodule EscalimetroWeb.EventLive.Show do
                 <.icon name="hero-chart-bar" class="size-4" /> Resultados
               </.button>
               <.button
-                :if={@event.status != "completed"}
+                :if={@event.status != "closed"}
                 navigate={~p"/events/#{@event}/edit"}
                 class="btn btn-soft"
               >
                 <.icon name="hero-pencil-square" class="size-4" /> Editar
               </.button>
               <button
-                :if={@event.status != "completed"}
-                id="event-complete-button"
+                :if={@event.status != "closed"}
+                id="event-close-button"
                 type="button"
-                phx-click="complete"
-                data-confirm="Concluir este evento? Pautas abertas serao fechadas."
+                phx-click="close"
+                data-confirm="Fechar este evento? Pautas abertas serao fechadas."
                 class="inline-flex items-center justify-center gap-2 rounded-md bg-base-content px-4 py-2 text-sm font-semibold text-base-100 shadow-sm transition hover:-translate-y-0.5 hover:bg-base-content/85"
               >
-                <.icon name="hero-check-circle" class="size-4" /> Concluir
+                <.icon name="hero-lock-closed" class="size-4" /> Fechar
+              </button>
+              <button
+                :if={@event.status == "closed"}
+                id="event-reopen-button"
+                type="button"
+                phx-click="reopen"
+                data-confirm="Reabrir este evento e suas pautas?"
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-emerald-500/30 px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-500/10"
+              >
+                <.icon name="hero-lock-open" class="size-4" /> Reabrir
               </button>
             </div>
           </div>
@@ -86,9 +96,9 @@ defmodule EscalimetroWeb.EventLive.Show do
           </div>
           <div class="rounded-lg border border-base-content/10 bg-base-100 p-4">
             <dt class="text-xs font-semibold uppercase tracking-wide text-base-content/50">
-              Concluido em
+              Fechado em
             </dt>
-            <dd class="mt-2 text-sm font-medium">{completed_label(@event)}</dd>
+            <dd class="mt-2 text-sm font-medium">{closed_label(@event)}</dd>
           </div>
         </dl>
 
@@ -136,7 +146,7 @@ defmodule EscalimetroWeb.EventLive.Show do
             </div>
             <div class="flex flex-wrap gap-2">
               <.button
-                :if={@event.status != "completed"}
+                :if={@event.status != "closed"}
                 navigate={~p"/events/#{@event}/ballots/new"}
                 variant="primary"
                 class="btn btn-primary"
@@ -188,20 +198,24 @@ defmodule EscalimetroWeb.EventLive.Show do
                   </p>
                   <p class="text-sm text-base-content/55">
                     Posicao {ballot.position} · {option_summary(ballot)}
-                    <span :if={ballot.allow_sugestion}> · sugestoes habilitadas</span>
+                    <span :if={ballot.kind == "multiple_choice"}>
+                      · {selection_mode_label(ballot.selection_mode)}
+                    </span>
+                    <span :if={ballot.allow_suggestion}> · sugestoes habilitadas</span>
+                    <span :if={ballot.show_justifications}> · justificativas visiveis</span>
                   </p>
                 </div>
 
                 <div class="flex shrink-0 flex-wrap gap-2">
                   <.button
-                    :if={@event.status != "completed"}
+                    :if={@event.status != "closed"}
                     navigate={~p"/events/#{@event}/ballots/#{ballot}/edit"}
                     class="btn btn-soft"
                   >
                     <.icon name="hero-pencil-square" class="size-4" /> Editar
                   </.button>
                   <button
-                    :if={@event.status != "completed" and ballot.status == "open"}
+                    :if={@event.status != "closed" and ballot.status == "open"}
                     id={"ballot-close-button-#{ballot.id}"}
                     type="button"
                     phx-click="close_ballot"
@@ -211,7 +225,7 @@ defmodule EscalimetroWeb.EventLive.Show do
                     <.icon name="hero-lock-closed" class="size-4" /> Fechar
                   </button>
                   <button
-                    :if={@event.status != "completed" and ballot.status == "closed"}
+                    :if={@event.status != "closed" and ballot.status == "closed"}
                     id={"ballot-reopen-button-#{ballot.id}"}
                     type="button"
                     phx-click="reopen_ballot"
@@ -282,22 +296,41 @@ defmodule EscalimetroWeb.EventLive.Show do
   end
 
   @impl true
-  def handle_event("complete", _params, socket) do
-    case Events.complete_event(socket.assigns.current_scope, socket.assigns.event) do
+  def handle_event("close", _params, socket) do
+    case Events.close_event(socket.assigns.current_scope, socket.assigns.event) do
       {:ok, event} ->
         {:noreply,
          socket
-         |> put_flash(:info, "Evento concluido com sucesso.")
+         |> put_flash(:info, "Evento fechado com sucesso.")
          |> assign_event(event)}
 
-      {:error, :completed_event} ->
-        {:noreply, put_flash(socket, :error, "Este evento ja esta concluido.")}
+      {:error, :closed_event} ->
+        {:noreply, put_flash(socket, :error, "Este evento ja esta fechado.")}
 
       {:error, :unauthorized} ->
         {:noreply, redirect_to_events(socket)}
 
       {:error, _changeset} ->
-        {:noreply, put_flash(socket, :error, "Nao foi possivel concluir o evento.")}
+        {:noreply, put_flash(socket, :error, "Nao foi possivel fechar o evento.")}
+    end
+  end
+
+  def handle_event("reopen", _params, socket) do
+    case Events.reopen_event(socket.assigns.current_scope, socket.assigns.event) do
+      {:ok, event} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Evento reaberto com sucesso.")
+         |> assign_event(event)}
+
+      {:error, :open_event} ->
+        {:noreply, put_flash(socket, :error, "Este evento ja esta aberto.")}
+
+      {:error, :unauthorized} ->
+        {:noreply, redirect_to_events(socket)}
+
+      {:error, _changeset} ->
+        {:noreply, put_flash(socket, :error, "Nao foi possivel reabrir o evento.")}
     end
   end
 
@@ -324,9 +357,8 @@ defmodule EscalimetroWeb.EventLive.Show do
          |> put_flash(:info, "Pauta fechada com sucesso.")
          |> assign_event(socket.assigns.event)}
 
-      {:error, :completed_event} ->
-        {:noreply,
-         put_flash(socket, :error, "Eventos concluidos nao aceitam alteracoes de pauta.")}
+      {:error, :closed_event} ->
+        {:noreply, put_flash(socket, :error, "Eventos fechados nao aceitam alteracoes de pauta.")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Nao foi possivel fechar a pauta.")}
@@ -343,9 +375,8 @@ defmodule EscalimetroWeb.EventLive.Show do
          |> put_flash(:info, "Pauta reaberta com sucesso.")
          |> assign_event(socket.assigns.event)}
 
-      {:error, :completed_event} ->
-        {:noreply,
-         put_flash(socket, :error, "Eventos concluidos nao aceitam alteracoes de pauta.")}
+      {:error, :closed_event} ->
+        {:noreply, put_flash(socket, :error, "Eventos fechados nao aceitam alteracoes de pauta.")}
 
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Nao foi possivel reabrir a pauta.")}
@@ -389,22 +420,23 @@ defmodule EscalimetroWeb.EventLive.Show do
     Calendar.strftime(scheduled_at, "%d/%m/%Y %H:%M")
   end
 
-  defp completed_label(%{completed_at: nil}), do: "Nao concluido"
+  defp closed_label(%{closed_at: nil}), do: "Nao fechado"
 
-  defp completed_label(%{completed_at: completed_at}) do
-    Calendar.strftime(completed_at, "%d/%m/%Y %H:%M")
+  defp closed_label(%{closed_at: closed_at}) do
+    Calendar.strftime(closed_at, "%d/%m/%Y %H:%M")
   end
 
-  defp status_label("draft"), do: "Rascunho"
   defp status_label("open"), do: "Aberto"
-  defp status_label("completed"), do: "Concluido"
+  defp status_label("closed"), do: "Fechado"
 
-  defp status_badge_class("draft"), do: "bg-amber-100 text-amber-800"
   defp status_badge_class("open"), do: "bg-emerald-100 text-emerald-800"
-  defp status_badge_class("completed"), do: "bg-slate-200 text-slate-700"
+  defp status_badge_class("closed"), do: "bg-slate-200 text-slate-700"
 
   defp ballot_kind_label("multiple_choice"), do: "Multipla escolha"
   defp ballot_kind_label("yes_no_maybe"), do: "Sim, nao ou talvez"
+
+  defp selection_mode_label("multi_choice"), do: "varias respostas"
+  defp selection_mode_label(_mode), do: "resposta unica"
 
   defp ballot_status_label("open"), do: "Aberta"
   defp ballot_status_label("closed"), do: "Fechada"
@@ -412,9 +444,15 @@ defmodule EscalimetroWeb.EventLive.Show do
   defp option_summary(%{kind: "yes_no_maybe"}), do: "Sim, nao e talvez"
 
   defp option_summary(%{options: options}) do
-    "#{length(options)} opcao(oes)"
+    active_options = Enum.reject(options, & &1.rejected_at)
+    "#{length(active_options)} opcao(oes)"
   end
 
   defp participant_choice_labels(%{kind: "yes_no_maybe"}), do: ["Sim", "Nao", "Talvez"]
-  defp participant_choice_labels(%{options: options}), do: Enum.map(options, & &1.label)
+
+  defp participant_choice_labels(%{options: options}) do
+    options
+    |> Enum.reject(& &1.rejected_at)
+    |> Enum.map(& &1.label)
+  end
 end

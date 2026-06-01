@@ -70,7 +70,7 @@ defmodule EscalimetroWeb.ModerationLive.Index do
 
               <div class="w-full shrink-0 lg:w-80">
                 <.form
-                  :if={is_nil(vote.rejected_at) and @event.status != "completed"}
+                  :if={is_nil(vote.rejected_at) and @event.status != "closed"}
                   for={to_form(%{}, as: :vote)}
                   id={"vote-reject-form-#{vote.id}"}
                   phx-submit="reject_vote"
@@ -94,7 +94,7 @@ defmodule EscalimetroWeb.ModerationLive.Index do
                 </.form>
 
                 <button
-                  :if={not is_nil(vote.rejected_at) and @event.status != "completed"}
+                  :if={not is_nil(vote.rejected_at) and @event.status != "closed"}
                   id={"vote-restore-button-#{vote.id}"}
                   type="button"
                   phx-click="restore_vote"
@@ -149,7 +149,7 @@ defmodule EscalimetroWeb.ModerationLive.Index do
                 </div>
 
                 <button
-                  :if={is_nil(option.rejected_at) and @event.status != "completed"}
+                  :if={is_nil(option.rejected_at) and @event.status != "closed"}
                   id={"suggestion-reject-button-#{option.id}"}
                   type="button"
                   phx-click="reject_option"
@@ -190,8 +190,8 @@ defmodule EscalimetroWeb.ModerationLive.Index do
          |> put_flash(:info, "Voto rejeitado com sucesso.")
          |> assign_votes()}
 
-      {:error, :completed_event} ->
-        {:noreply, put_flash(socket, :error, "Eventos concluidos nao aceitam moderacao.")}
+      {:error, :closed_event} ->
+        {:noreply, put_flash(socket, :error, "Eventos fechados nao aceitam moderacao.")}
 
       _other ->
         {:noreply, put_flash(socket, :error, "Nao foi possivel rejeitar voto.")}
@@ -208,8 +208,8 @@ defmodule EscalimetroWeb.ModerationLive.Index do
          |> put_flash(:info, "Voto restaurado com sucesso.")
          |> assign_votes()}
 
-      {:error, :completed_event} ->
-        {:noreply, put_flash(socket, :error, "Eventos concluidos nao aceitam moderacao.")}
+      {:error, :closed_event} ->
+        {:noreply, put_flash(socket, :error, "Eventos fechados nao aceitam moderacao.")}
 
       {:error, :invalidated_participant} ->
         {:noreply,
@@ -230,8 +230,8 @@ defmodule EscalimetroWeb.ModerationLive.Index do
          |> put_flash(:info, "Sugestao rejeitada com sucesso.")
          |> assign_votes()}
 
-      {:error, :completed_event} ->
-        {:noreply, put_flash(socket, :error, "Eventos concluidos nao aceitam moderacao.")}
+      {:error, :closed_event} ->
+        {:noreply, put_flash(socket, :error, "Eventos fechados nao aceitam moderacao.")}
 
       _other ->
         {:noreply, put_flash(socket, :error, "Nao foi possivel rejeitar sugestao.")}

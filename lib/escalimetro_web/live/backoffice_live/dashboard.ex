@@ -30,6 +30,29 @@ defmodule EscalimetroWeb.BackofficeLive.Dashboard do
           </.link>
         </header>
 
+        <.form
+          for={@filters_form}
+          id="backoffice-filters-form"
+          phx-change="filter"
+          phx-submit="filter"
+          class="grid gap-3 rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4"
+        >
+          <.input field={@filters_form[:date_from]} type="date" label="Data inicial" />
+          <.input field={@filters_form[:date_to]} type="date" label="Data final" />
+          <.input
+            field={@filters_form[:user_query]}
+            type="text"
+            label="Buscar usuarios"
+            placeholder="email"
+          />
+          <.input
+            field={@filters_form[:event_query]}
+            type="text"
+            label="Buscar eventos"
+            placeholder="titulo ou local"
+          />
+        </.form>
+
         <section id="backoffice-stats" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <.stat_card
             id="backoffice-active-users-count"
@@ -43,7 +66,7 @@ defmodule EscalimetroWeb.BackofficeLive.Dashboard do
             icon="hero-calendar-days"
             label="Eventos abertos"
             value={@stats.open_events_count}
-            hint={"#{@stats.draft_events_count} rascunho(s), #{@stats.completed_events_count} concluido(s)"}
+            hint={"#{@stats.closed_events_count} fechado(s)"}
           />
           <.stat_card
             id="backoffice-open-ballots-count"
@@ -85,9 +108,33 @@ defmodule EscalimetroWeb.BackofficeLive.Dashboard do
               :for={{id, user} <- @streams.users}
               id={id}
               user={user}
-              current_user={@current_scope.user}
+              viewer={@current_scope.user}
               impersonation_form={@impersonation_form}
             />
+          </div>
+        </section>
+
+        <section class="space-y-4">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 class="text-xl font-semibold">Eventos</h2>
+              <p class="mt-1 text-sm text-base-content/65">
+                Busque eventos recentes por titulo ou local dentro do periodo selecionado.
+              </p>
+            </div>
+            <span class="rounded-full bg-base-200 px-3 py-1 text-xs font-semibold text-base-content/70">
+              {@stats.total_events_count} evento(s)
+            </span>
+          </div>
+
+          <div id="backoffice-events-list" phx-update="stream" class="space-y-3">
+            <p
+              id="backoffice-events-empty"
+              class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-6 text-center text-sm text-base-content/55"
+            >
+              Nenhum evento encontrado.
+            </p>
+            <.event_row :for={{id, event} <- @streams.events} id={id} event={event} />
           </div>
         </section>
       </section>
@@ -118,7 +165,7 @@ defmodule EscalimetroWeb.BackofficeLive.Dashboard do
 
   attr :id, :string, required: true
   attr :user, Escalimetro.Accounts.User, required: true
-  attr :current_user, Escalimetro.Accounts.User, required: true
+  attr :viewer, Escalimetro.Accounts.User, required: true
   attr :impersonation_form, Phoenix.HTML.Form, required: true
 
   defp user_row(assigns) do
@@ -155,7 +202,7 @@ defmodule EscalimetroWeb.BackofficeLive.Dashboard do
           <button
             id={"impersonate-user-button-#{@user.id}"}
             type="submit"
-            disabled={@user.id == @current_user.id}
+            disabled={@user.id == @viewer.id}
             class="inline-flex items-center justify-center gap-2 rounded-md border border-base-content/15 px-3 py-2 text-sm font-semibold transition hover:-translate-y-0.5 hover:border-primary/30 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40"
           >
             <.icon name="hero-eye" class="size-4" /> Impersonar
@@ -166,15 +213,41 @@ defmodule EscalimetroWeb.BackofficeLive.Dashboard do
     """
   end
 
+  attr :id, :string, required: true
+  attr :event, Escalimetro.Events.Event, required: true
+
+  defp event_row(assigns) do
+    ~H"""
+    <article id={@id} class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="truncate font-semibold">{@event.title}</h3>
+            <span class={[
+              "rounded-full px-2 py-1 text-xs font-semibold",
+              @event.status == "open" && "bg-emerald-100 text-emerald-800",
+              @event.status == "closed" && "bg-slate-200 text-slate-700"
+            ]}>
+              {event_status_label(@event.status)}
+            </span>
+          </div>
+          <p class="mt-1 text-sm text-base-content/60">
+            {@event.owner_user.email} · {datetime_label(@event.inserted_at)}
+          </p>
+        </div>
+      </div>
+    </article>
+    """
+  end
+
   @impl true
   def mount(_params, _session, socket) do
-    case Backoffice.dashboard_data(socket.assigns.current_scope) do
-      {:ok, %{stats: stats, users: users}} ->
+    case Backoffice.dashboard_data(socket.assigns.current_scope, %{}) do
+      {:ok, data} ->
         {:ok,
          socket
-         |> assign(:stats, stats)
          |> assign(:impersonation_form, to_form(%{}, as: :impersonation))
-         |> stream(:users, users, reset: true)}
+         |> assign_dashboard(data)}
 
       {:error, :unauthorized} ->
         {:ok,
@@ -184,9 +257,37 @@ defmodule EscalimetroWeb.BackofficeLive.Dashboard do
     end
   end
 
+  @impl true
+  def handle_event("filter", %{"filters" => filters}, socket) do
+    case Backoffice.dashboard_data(socket.assigns.current_scope, filters) do
+      {:ok, data} -> {:noreply, assign_dashboard(socket, data)}
+      {:error, :unauthorized} -> {:noreply, push_navigate(socket, to: ~p"/events")}
+    end
+  end
+
+  defp assign_dashboard(socket, data) do
+    socket
+    |> assign(:stats, data.stats)
+    |> assign(:filters_form, to_form(filters_form_params(data.filters), as: :filters))
+    |> stream(:users, data.users, reset: true)
+    |> stream(:events, data.events, reset: true)
+  end
+
+  defp filters_form_params(filters) do
+    %{
+      "date_from" => filters.date_from,
+      "date_to" => filters.date_to,
+      "user_query" => filters.user_query,
+      "event_query" => filters.event_query
+    }
+  end
+
   defp datetime_label(nil), do: "data indisponivel"
 
   defp datetime_label(datetime) do
     Calendar.strftime(datetime, "%d/%m/%Y %H:%M")
   end
+
+  defp event_status_label("open"), do: "Aberto"
+  defp event_status_label("closed"), do: "Fechado"
 end

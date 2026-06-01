@@ -14,6 +14,7 @@ defmodule EscalimetroWeb.InviteLive.AdminTest do
     {:ok, view, _html} = live(conn, ~p"/events/#{event}/invite")
 
     assert has_element?(view, "#event-invite-url")
+    assert has_element?(view, "#event-results-url")
     assert has_element?(view, "#event-invite-copy-button")
     assert has_element?(view, "#event-invite-rotate-button")
     assert has_element?(view, "#event-invite-invalidate-button")
@@ -22,6 +23,7 @@ defmodule EscalimetroWeb.InviteLive.AdminTest do
     first_url = invite_url(view)
     first_token = invite_token(first_url)
     assert first_url =~ ~p"/join/#{first_token}"
+    assert result_url(view) =~ ~p"/results/#{first_token}"
     assert Events.get_active_invite_by_token(first_token)
     assert render(element(view, "#event-invite-qrcode")) =~ first_url
 
@@ -69,5 +71,15 @@ defmodule EscalimetroWeb.InviteLive.AdminTest do
     |> Map.fetch!(:path)
     |> String.split("/join/")
     |> List.last()
+  end
+
+  defp result_url(view) do
+    html =
+      view
+      |> element("#event-results-url")
+      |> render()
+
+    [_, url] = Regex.run(~r/value="([^"]+)"/, html)
+    url
   end
 end

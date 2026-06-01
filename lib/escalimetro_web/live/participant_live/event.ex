@@ -26,8 +26,8 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
             <div class="flex flex-wrap gap-2">
               <span class={[
                 "rounded-full px-3 py-1 text-sm font-semibold",
-                @event.status == "completed" && "bg-slate-200 text-slate-700",
-                @event.status != "completed" && "bg-emerald-100 text-emerald-800"
+                @event.status == "closed" && "bg-slate-200 text-slate-700",
+                @event.status != "closed" && "bg-emerald-100 text-emerald-800"
               ]}>
                 {event_status(@event.status)}
               </span>
@@ -54,7 +54,10 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
             id={id}
             class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm"
           >
-            <% current_vote = Map.get(@votes_by_ballot, ballot.id) %>
+            <% current_votes = Map.get(@active_votes_by_ballot, ballot.id, []) %>
+            <% current_vote = current_ballot_vote(current_votes) %>
+            <% latest_vote = latest_ballot_vote(Map.get(@votes_by_ballot, ballot.id, [])) %>
+            <% result = Map.get(@results_by_ballot, ballot.id) %>
             <% blocked_reason = blocked_reason(@event, @participant, ballot) %>
 
             <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -69,10 +72,16 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                     {ballot_status(ballot.status)}
                   </span>
                   <span
-                    :if={current_vote && current_vote.rejected_at}
+                    :if={(current_votes == [] and latest_vote) && latest_vote.rejected_at}
                     class="rounded-full bg-error/10 px-2 py-1 text-xs font-semibold text-error"
                   >
                     Voto rejeitado
+                  </span>
+                  <span
+                    :if={ballot.kind == "multiple_choice"}
+                    class="rounded-full bg-base-200 px-2 py-1 text-xs font-semibold"
+                  >
+                    {selection_mode_label(ballot.selection_mode)}
                   </span>
                 </div>
                 <p :if={ballot.description} class="mt-2 text-sm leading-6 text-base-content/65">
@@ -81,8 +90,8 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                 <p :if={blocked_reason} class="mt-2 text-sm font-medium text-base-content/55">
                   {blocked_reason}
                 </p>
-                <p :if={current_vote && current_vote.rejection_reason} class="mt-2 text-sm text-error">
-                  Motivo: {current_vote.rejection_reason}
+                <p :if={latest_vote && latest_vote.rejection_reason} class="mt-2 text-sm text-error">
+                  Motivo: {latest_vote.rejection_reason}
                 </p>
               </div>
             </div>
@@ -94,19 +103,6 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
               phx-value-ballot-id={ballot.id}
               class="mt-4 space-y-4"
             >
-              <input
-                :if={current_vote && current_vote.ballot_option_id}
-                type="hidden"
-                name="vote[ballot_option_id]"
-                value={current_vote.ballot_option_id}
-              />
-              <input
-                :if={current_vote && current_vote.value}
-                type="hidden"
-                name="vote[value]"
-                value={current_vote.value}
-              />
-
               <div class="grid gap-2 sm:grid-cols-2">
                 <%= if ballot.kind == "multiple_choice" do %>
                   <div :for={option <- ballot.options}>
@@ -114,7 +110,7 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                       type="radio"
                       name="vote[ballot_option_id]"
                       value={option.id}
-                      checked={current_vote && current_vote.ballot_option_id == option.id}
+                      checked={option_selected?(current_votes, option.id)}
                       disabled={not is_nil(blocked_reason)}
                       class="sr-only"
                     />
@@ -126,19 +122,35 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                       disabled={not is_nil(blocked_reason)}
                       class={[
                         "w-full rounded-lg border px-4 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
-                        current_vote && current_vote.ballot_option_id == option.id &&
+                        option_selected?(current_votes, option.id) &&
                           "border-primary bg-primary/10 text-primary",
-                        (!current_vote || current_vote.ballot_option_id != option.id) &&
+                        !option_selected?(current_votes, option.id) &&
                           "border-base-content/10 hover:-translate-y-0.5 hover:border-primary/30"
                       ]}
                     >
-                      <span>{option.label}</span>
+                      <span class="flex items-center justify-between gap-2">
+                        <span>{option.label}</span>
+                        <span :if={option_selected?(current_votes, option.id)} class="text-xs">
+                          Selecionada
+                        </span>
+                      </span>
                       <span
                         :if={option.suggested_by_participant_id}
                         class="mt-1 block text-xs font-normal text-base-content/55"
                       >
                         Sugerido por {suggestion_author(option)}
                       </span>
+                    </button>
+                    <button
+                      :if={option_selected?(current_votes, option.id) and is_nil(blocked_reason)}
+                      id={"vote-remove-option-button-#{option.id}"}
+                      type="button"
+                      phx-click="remove_vote"
+                      phx-value-ballot-id={ballot.id}
+                      phx-value-ballot-option-id={option.id}
+                      class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border border-error/30 px-3 py-2 text-xs font-semibold text-error transition hover:-translate-y-0.5 hover:bg-error/10"
+                    >
+                      <.icon name="hero-x-circle" class="size-4" /> Remover voto
                     </button>
                   </div>
                 <% else %>
@@ -166,6 +178,20 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                       ]}
                     >
                       {label}
+                    </button>
+                    <button
+                      :if={
+                        not is_nil(current_vote) and current_vote.value == value and
+                          is_nil(blocked_reason)
+                      }
+                      id={"vote-remove-option-button-#{ballot.id}-#{value}"}
+                      type="button"
+                      phx-click="remove_vote"
+                      phx-value-ballot-id={ballot.id}
+                      phx-value-value={value}
+                      class="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-md border border-error/30 px-3 py-2 text-xs font-semibold text-error transition hover:-translate-y-0.5 hover:bg-error/10"
+                    >
+                      <.icon name="hero-x-circle" class="size-4" /> Remover voto
                     </button>
                   </div>
                 <% end %>
@@ -196,6 +222,8 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
               <button
                 id={"vote-submit-button-#{ballot.id}"}
                 type="submit"
+                name={current_vote_button_name(current_vote)}
+                value={current_vote_button_value(current_vote)}
                 disabled={not is_nil(blocked_reason) or is_nil(current_vote)}
                 class="inline-flex w-full items-center justify-center gap-2 rounded-md bg-base-content px-4 py-2 text-sm font-semibold text-base-100 transition hover:-translate-y-0.5 hover:bg-base-content/85 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -203,8 +231,85 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
               </button>
             </.form>
 
+            <section
+              :if={result}
+              id={"participant-ballot-results-#{ballot.id}"}
+              class="mt-5 rounded-lg border border-base-content/10 bg-base-200/35 p-3"
+            >
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+                  Resultado parcial
+                </h3>
+                <span class="rounded-full bg-base-100 px-2.5 py-1 text-xs font-semibold">
+                  {result.active_votes_count} voto(s)
+                </span>
+              </div>
+
+              <p
+                :if={result.tie?}
+                class="mt-3 rounded-md bg-warning/10 px-3 py-2 text-sm font-semibold text-warning"
+              >
+                Empate entre {tied_labels(result)}.
+              </p>
+              <p
+                :if={result.resolved_by_intensity?}
+                class="mt-3 rounded-md bg-primary/10 px-3 py-2 text-sm font-semibold text-primary"
+              >
+                Empate em votos decidido por intensidade.
+              </p>
+
+              <div class="mt-3 space-y-2">
+                <details
+                  :for={option <- result.option_results}
+                  id={"participant-result-option-#{ballot.id}-#{option.key}"}
+                  class="rounded-md border border-base-content/10 bg-base-100 p-3"
+                >
+                  <summary class="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold">
+                    <span>{option.label}</span>
+                    <span class="flex flex-wrap justify-end gap-2 text-xs">
+                      <span class="rounded-full bg-base-200 px-2 py-1">
+                        {option.votes_count} voto(s)
+                      </span>
+                      <span
+                        :if={ballot.kind == "multiple_choice"}
+                        class="rounded-full bg-base-200 px-2 py-1"
+                      >
+                        {option.intensity_count} intenso(s)
+                      </span>
+                    </span>
+                  </summary>
+                  <div class="mt-3 space-y-2">
+                    <p :if={option.voter_results == []} class="text-sm text-base-content/55">
+                      Nenhum voto ativo nesta opcao.
+                    </p>
+                    <div
+                      :for={vote <- option.voter_results}
+                      id={"participant-result-vote-#{vote.id}"}
+                      class="rounded-md bg-base-200/60 px-3 py-2 text-sm"
+                    >
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span class="font-semibold">{vote.participant_name}</span>
+                        <span
+                          :if={vote.intensity}
+                          class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+                        >
+                          favorito
+                        </span>
+                      </div>
+                      <p
+                        :if={ballot.show_justifications and vote.justification}
+                        class="mt-1 text-base-content/65"
+                      >
+                        {vote.justification}
+                      </p>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </section>
+
             <.form
-              :if={ballot.allow_sugestion and is_nil(blocked_reason)}
+              :if={ballot.allow_suggestion and is_nil(blocked_reason)}
               for={to_form(%{}, as: :suggestion)}
               id={"suggestion-form-#{ballot.id}"}
               phx-submit="suggest_option"
@@ -229,7 +334,7 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
             </.form>
 
             <div
-              :if={ballot.allow_sugestion}
+              :if={ballot.allow_suggestion}
               id={"suggested-options-list-#{ballot.id}"}
               class="mt-4 space-y-2"
             >
@@ -322,6 +427,25 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
     end
   end
 
+  def handle_event("remove_vote", %{"ballot-id" => ballot_id} = params, socket) do
+    ballot = find_ballot(socket.assigns.ballots, ballot_id)
+    vote_params = removal_params(params)
+
+    case ballot && Events.remove_vote(socket.assigns.participant, ballot, vote_params) do
+      {:ok, _votes} ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "Voto removido.")
+         |> reload_participant_event()}
+
+      {:error, reason} when is_atom(reason) ->
+        {:noreply, put_flash(socket, :error, vote_error(reason))}
+
+      nil ->
+        {:noreply, put_flash(socket, :error, "Pauta nao encontrada.")}
+    end
+  end
+
   @impl true
   def handle_info({:event_changed, _event_name, _event_id}, socket) do
     {:noreply, reload_participant_event(socket)}
@@ -348,6 +472,8 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
     |> assign(:participant_token, data.participant.participant_token)
     |> assign(:ballots, data.ballots)
     |> assign(:votes_by_ballot, data.votes_by_ballot)
+    |> assign(:active_votes_by_ballot, data.active_votes_by_ballot)
+    |> assign(:results_by_ballot, Map.new(data.results, &{&1.ballot.id, &1}))
     |> assign_online_count()
     |> stream(:ballots, data.ballots, reset: true)
   end
@@ -367,7 +493,7 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
     Enum.find(ballots, &(&1.id == parsed_id))
   end
 
-  defp blocked_reason(%{status: "completed"}, _participant, _ballot), do: "Evento concluido."
+  defp blocked_reason(%{status: "closed"}, _participant, _ballot), do: "Evento fechado."
   defp blocked_reason(_event, %{status: "invalidated"}, _ballot), do: "Participacao invalidada."
   defp blocked_reason(_event, _participant, %{status: "closed"}), do: "Pauta fechada."
   defp blocked_reason(_event, _participant, _ballot), do: nil
@@ -388,19 +514,57 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
     Enum.filter(options, & &1.suggested_by_participant_id)
   end
 
+  defp current_ballot_vote([vote | _votes]), do: vote
+  defp current_ballot_vote([]), do: nil
+
+  defp latest_ballot_vote([vote | _votes]), do: vote
+  defp latest_ballot_vote([]), do: nil
+
+  defp option_selected?(votes, option_id) do
+    Enum.any?(votes, &(&1.ballot_option_id == option_id))
+  end
+
+  defp current_vote_button_name(%{ballot_option_id: option_id}) when not is_nil(option_id) do
+    "vote[ballot_option_id]"
+  end
+
+  defp current_vote_button_name(%{value: value}) when not is_nil(value), do: "vote[value]"
+  defp current_vote_button_name(_vote), do: nil
+
+  defp current_vote_button_value(%{ballot_option_id: option_id}) when not is_nil(option_id) do
+    option_id
+  end
+
+  defp current_vote_button_value(%{value: value}) when not is_nil(value), do: value
+  defp current_vote_button_value(_vote), do: nil
+
+  defp selection_mode_label("multi_choice"), do: "Varias respostas"
+  defp selection_mode_label(_mode), do: "Resposta unica"
+
+  defp tied_labels(result) do
+    result.tied_options
+    |> Enum.map(& &1.label)
+    |> Enum.join(", ")
+  end
+
+  defp removal_params(%{"ballot-option-id" => option_id}), do: %{"ballot_option_id" => option_id}
+  defp removal_params(%{"value" => value}), do: %{"value" => value}
+  defp removal_params(_params), do: %{}
+
   defp yes_no_maybe_options, do: [{"yes", "Sim"}, {"no", "Nao"}, {"maybe", "Talvez"}]
 
-  defp event_status("completed"), do: "Concluido"
+  defp event_status("closed"), do: "Fechado"
   defp event_status(_status), do: "Aberto"
 
   defp ballot_status("open"), do: "Aberta"
   defp ballot_status("closed"), do: "Fechada"
 
-  defp vote_error(:completed_event), do: "Evento concluido."
+  defp vote_error(:closed_event), do: "Evento fechado."
   defp vote_error(:closed_ballot), do: "Pauta fechada."
   defp vote_error(:invalidated_participant), do: "Participacao invalidada."
   defp vote_error(:invalid_ballot_option), do: "Opcao invalida."
   defp vote_error(:invalid_vote_value), do: "Voto invalido."
+  defp vote_error(:invalid_vote_shape), do: "Voto invalido."
   defp vote_error(:suggestions_disabled), do: "Sugestoes desabilitadas para esta pauta."
   defp vote_error(_reason), do: "Nao foi possivel concluir a acao."
 

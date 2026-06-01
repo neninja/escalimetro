@@ -59,6 +59,14 @@ defmodule EscalimetroWeb.InviteLive.Join do
               <.icon name="hero-arrow-right-circle" class="size-4" /> Entrar na votacao
             </button>
           </.form>
+
+          <.link
+            id="public-results-link"
+            navigate={~p"/results/#{@token}"}
+            class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-base-content/15 px-4 py-2 text-sm font-semibold transition hover:-translate-y-0.5 hover:border-primary/30 hover:text-primary"
+          >
+            <.icon name="hero-chart-bar" class="size-4" /> Ver resultados
+          </.link>
         </div>
       </section>
     </Layouts.app>

@@ -274,7 +274,22 @@ defmodule EscalimetroWeb.UserAuth do
     else
       socket =
         socket
-        |> Phoenix.LiveView.put_flash(:error, "You must log in to access this page.")
+        |> Phoenix.LiveView.put_flash(:error, "Voce precisa entrar para acessar esta pagina.")
+        |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")
+
+      {:halt, socket}
+    end
+  end
+
+  def on_mount(:require_confirmed, _params, session, socket) do
+    socket = mount_current_scope(socket, session)
+
+    if confirmed_user?(socket.assigns.current_scope) do
+      {:cont, socket}
+    else
+      socket =
+        socket
+        |> Phoenix.LiveView.put_flash(:error, "Confirme sua conta antes de acessar esta area.")
         |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")
 
       {:halt, socket}
@@ -289,7 +304,7 @@ defmodule EscalimetroWeb.UserAuth do
     else
       socket =
         socket
-        |> Phoenix.LiveView.put_flash(:error, "You must re-authenticate to access this page.")
+        |> Phoenix.LiveView.put_flash(:error, "Confirme sua identidade para acessar esta pagina.")
         |> Phoenix.LiveView.redirect(to: ~p"/users/log-in")
 
       {:halt, socket}
@@ -332,12 +347,7 @@ defmodule EscalimetroWeb.UserAuth do
   defp impersonator_user_by_token(_token), do: nil
 
   @doc "Returns the path to redirect to after log in."
-  # the user was already logged in, redirect to settings
-  def signed_in_path(%Plug.Conn{assigns: %{current_scope: %Scope{user: %Accounts.User{}}}}) do
-    ~p"/users/settings"
-  end
-
-  def signed_in_path(_), do: ~p"/"
+  def signed_in_path(_), do: ~p"/events"
 
   @doc """
   Plug for routes that require the user to be authenticated.
@@ -347,12 +357,29 @@ defmodule EscalimetroWeb.UserAuth do
       conn
     else
       conn
-      |> put_flash(:error, "You must log in to access this page.")
+      |> put_flash(:error, "Voce precisa entrar para acessar esta pagina.")
       |> maybe_store_return_to()
       |> redirect(to: ~p"/users/log-in")
       |> halt()
     end
   end
+
+  @doc """
+  Plug for routes that require a confirmed user.
+  """
+  def require_confirmed_user(conn, _opts) do
+    if confirmed_user?(conn.assigns.current_scope) do
+      conn
+    else
+      conn
+      |> put_flash(:error, "Confirme sua conta antes de acessar esta area.")
+      |> redirect(to: ~p"/users/log-in")
+      |> halt()
+    end
+  end
+
+  defp confirmed_user?(%Scope{user: %Accounts.User{confirmed_at: %DateTime{}}}), do: true
+  defp confirmed_user?(_scope), do: false
 
   defp maybe_store_return_to(%{method: "GET"} = conn) do
     put_session(conn, :user_return_to, current_path(conn))

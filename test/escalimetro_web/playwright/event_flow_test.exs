@@ -35,7 +35,7 @@ defmodule EscalimetroWeb.Playwright.EventFlowTest do
     session =
       session
       |> assert_path(~p"/events/#{event}", timeout: 5_000)
-      |> assert_has("#event-complete-button")
+      |> assert_has("#event-close-button")
       |> click_link("Editar")
       |> assert_path(~p"/events/#{event}/edit")
       |> within("#event-form", fn session ->
@@ -51,10 +51,10 @@ defmodule EscalimetroWeb.Playwright.EventFlowTest do
 
     session
     |> assert_path(~p"/events/#{event}", timeout: 5_000)
-    |> click_button("Concluir")
-    |> assert_has("#flash-info", text: "Evento concluido com sucesso.")
+    |> click_button("#event-close-button", "Fechar")
+    |> assert_has("#flash-info", text: "Evento fechado com sucesso.")
 
-    assert Repo.get!(Event, event.id).status == "completed"
+    assert Repo.get!(Event, event.id).status == "closed"
     assert Repo.get!(Ballot, ballot.id).status == "closed"
   end
 
@@ -75,8 +75,8 @@ defmodule EscalimetroWeb.Playwright.EventFlowTest do
     session
     |> visit(~p"/users/log-in/#{token}")
     |> assert_has("#login_form")
-    |> click_button("Log me in only this time")
-    |> assert_path(~p"/", timeout: 5_000)
+    |> click_button("Entrar apenas desta vez")
+    |> assert_path(~p"/events", timeout: 5_000)
   end
 
   defp event_from_current_path(session) do

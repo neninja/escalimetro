@@ -16,7 +16,7 @@ defmodule Escalimetro.EventsFixtures do
       title: unique_event_title(),
       description: "Descricao do evento",
       location: "Sala principal",
-      status: "draft"
+      status: "open"
     })
   end
 
@@ -31,7 +31,9 @@ defmodule Escalimetro.EventsFixtures do
       title: unique_ballot_title(),
       description: "Descricao da pauta",
       kind: "multiple_choice",
-      allow_sugestion: false,
+      selection_mode: "single_choice",
+      allow_suggestion: false,
+      show_justifications: false,
       position: 0,
       options: [
         %{label: unique_option_label(), position: 0},

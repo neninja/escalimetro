@@ -14,7 +14,7 @@ defmodule Escalimetro.BackofficeTest do
       _user = user_fixture()
 
       open_event = event_fixture(scope, %{status: "open"})
-      draft_event = event_fixture(scope)
+      event_to_close = event_fixture(scope)
       ballot = ballot_fixture(scope, open_event)
       participant = event_participant_fixture(scope, open_event)
       [option | _options] = ballot.options
@@ -24,14 +24,14 @@ defmodule Escalimetro.BackofficeTest do
                  ballot_option_id: option.id
                })
 
-      assert {:ok, _completed_event} = Events.complete_event(scope, draft_event)
+      assert {:ok, _closed_event} = Events.close_event(scope, event_to_close)
 
       assert {:ok, %{stats: stats, users: users}} = Backoffice.dashboard_data(scope)
 
       assert stats.total_users_count == 2
       assert stats.active_users_count == 2
       assert stats.open_events_count == 1
-      assert stats.completed_events_count == 1
+      assert stats.closed_events_count == 1
       assert stats.open_ballots_count == 1
       assert stats.active_votes_count == 1
       assert Enum.map(users, & &1.id) |> Enum.member?(admin.id)

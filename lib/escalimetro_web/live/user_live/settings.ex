@@ -11,8 +11,8 @@ defmodule EscalimetroWeb.UserLive.Settings do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="text-center">
         <.header>
-          Account Settings
-          <:subtitle>Manage your account email address and password settings</:subtitle>
+          Configuracoes da conta
+          <:subtitle>Gerencie email e senha da sua conta</:subtitle>
         </.header>
       </div>
 
@@ -25,7 +25,7 @@ defmodule EscalimetroWeb.UserLive.Settings do
           spellcheck="false"
           required
         />
-        <.button variant="primary" phx-disable-with="Changing...">Change Email</.button>
+        <.button variant="primary" phx-disable-with="Alterando...">Alterar email</.button>
       </.form>
 
       <div class="divider" />
@@ -49,7 +49,7 @@ defmodule EscalimetroWeb.UserLive.Settings do
         <.input
           field={@password_form[:password]}
           type="password"
-          label="New password"
+          label="Nova senha"
           autocomplete="new-password"
           spellcheck="false"
           required
@@ -57,12 +57,12 @@ defmodule EscalimetroWeb.UserLive.Settings do
         <.input
           field={@password_form[:password_confirmation]}
           type="password"
-          label="Confirm new password"
+          label="Confirmar nova senha"
           autocomplete="new-password"
           spellcheck="false"
         />
-        <.button variant="primary" phx-disable-with="Saving...">
-          Save Password
+        <.button variant="primary" phx-disable-with="Salvando...">
+          Salvar senha
         </.button>
       </.form>
     </Layouts.app>
@@ -74,10 +74,10 @@ defmodule EscalimetroWeb.UserLive.Settings do
     socket =
       case Accounts.update_user_email(socket.assigns.current_scope.user, token) do
         {:ok, _user} ->
-          put_flash(socket, :info, "Email changed successfully.")
+          put_flash(socket, :info, "Email alterado com sucesso.")
 
         {:error, _} ->
-          put_flash(socket, :error, "Email change link is invalid or it has expired.")
+          put_flash(socket, :error, "O link de alteracao de email e invalido ou expirou.")
       end
 
     {:ok, push_navigate(socket, to: ~p"/users/settings")}
@@ -124,7 +124,7 @@ defmodule EscalimetroWeb.UserLive.Settings do
           &url(~p"/users/settings/confirm-email/#{&1}")
         )
 
-        info = "A link to confirm your email change has been sent to the new address."
+        info = "Enviamos um link para confirmar a alteracao ao novo endereco."
         {:noreply, socket |> put_flash(:info, info)}
 
       changeset ->

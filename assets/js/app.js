@@ -25,6 +25,28 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/escalimetro"
 import topbar from "../vendor/topbar"
 
+const setTheme = (theme) => {
+  if (theme === "system") {
+    localStorage.removeItem("phx:theme")
+    document.documentElement.removeAttribute("data-theme")
+  } else {
+    localStorage.setItem("phx:theme", theme)
+    document.documentElement.setAttribute("data-theme", theme)
+  }
+}
+
+if (!document.documentElement.hasAttribute("data-theme")) {
+  setTheme(localStorage.getItem("phx:theme") || "system")
+}
+
+window.addEventListener("storage", (event) => {
+  if (event.key === "phx:theme") setTheme(event.newValue || "system")
+})
+
+window.addEventListener("phx:set-theme", (event) => {
+  setTheme(event.target.dataset.phxTheme)
+})
+
 const CopyInviteUrl = {
   mounted() {
     this.el.addEventListener("click", () => {
@@ -38,11 +60,41 @@ const CopyInviteUrl = {
   },
 }
 
+const ExportAsImage = {
+  mounted() {
+    this.el.addEventListener("click", () => {
+      const target = document.getElementById(this.el.dataset.exportTarget)
+      if (!target) return
+
+      const rect = target.getBoundingClientRect()
+      const width = Math.max(Math.ceil(rect.width), 1)
+      const height = Math.max(Math.ceil(rect.height), 1)
+      const clone = target.cloneNode(true)
+      clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml")
+
+      const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <foreignObject width="100%" height="100%">${new XMLSerializer().serializeToString(clone)}</foreignObject>
+</svg>`
+
+      const blob = new Blob([svg], {type: "image/svg+xml;charset=utf-8"})
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = this.el.dataset.exportFilename || "escalimetro-resultados.svg"
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    })
+  },
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, CopyInviteUrl},
+  hooks: {...colocatedHooks, CopyInviteUrl, ExportAsImage},
 })
 
 // Show progress bar on live navigation and form submits

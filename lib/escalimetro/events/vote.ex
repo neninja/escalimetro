@@ -7,9 +7,11 @@ defmodule Escalimetro.Events.Vote do
   alias Escalimetro.Events.{Ballot, BallotOption, Event, EventParticipant}
 
   @values ~w(yes no maybe)
+  @selection_modes ~w(single_choice multi_choice)
 
   schema "votes" do
     field :value, :string
+    field :selection_mode, :string, default: "single_choice"
     field :intensity, :boolean, default: false
     field :justification, :string
     field :rejected_at, :utc_datetime
@@ -25,12 +27,14 @@ defmodule Escalimetro.Events.Vote do
   end
 
   def values, do: @values
+  def selection_modes, do: @selection_modes
 
   def changeset(vote, attrs) do
     vote
     |> cast(attrs, [
       :ballot_option_id,
       :value,
+      :selection_mode,
       :intensity,
       :justification,
       :rejected_at,
@@ -40,16 +44,20 @@ defmodule Escalimetro.Events.Vote do
     |> validate_length(:justification, max: 2_000)
     |> validate_length(:rejection_reason, max: 500)
     |> validate_inclusion(:value, @values)
+    |> validate_inclusion(:selection_mode, @selection_modes)
     |> validate_option_or_value()
+    |> validate_value_selection_mode()
     |> foreign_key_constraint(:event_id)
     |> foreign_key_constraint(:ballot_id)
     |> foreign_key_constraint(:participant_id)
     |> foreign_key_constraint(:ballot_option_id)
     |> foreign_key_constraint(:rejected_by_user_id)
     |> unique_constraint(:ballot_option_id, name: :votes_active_option_unique_index)
+    |> unique_constraint(:selection_mode, name: :votes_active_single_choice_unique_index)
     |> unique_constraint(:participant_id, name: :votes_active_value_unique_index)
     |> check_constraint(:value, name: :votes_value_check)
     |> check_constraint(:ballot_option_id, name: :votes_option_or_value_check)
+    |> check_constraint(:selection_mode, name: :votes_selection_mode_check)
     |> check_constraint(:intensity, name: :votes_intensity_requires_option_check)
   end
 
@@ -67,14 +75,31 @@ defmodule Escalimetro.Events.Vote do
     vote
     |> change(rejected_at: nil, rejected_by_user_id: nil, rejection_reason: nil)
     |> unique_constraint(:ballot_option_id, name: :votes_active_option_unique_index)
+    |> unique_constraint(:selection_mode, name: :votes_active_single_choice_unique_index)
     |> unique_constraint(:participant_id, name: :votes_active_value_unique_index)
   end
 
   defp validate_option_or_value(changeset) do
-    if get_field(changeset, :ballot_option_id) || get_field(changeset, :value) do
-      changeset
+    has_option? = not is_nil(get_field(changeset, :ballot_option_id))
+    has_value? = not is_nil(get_field(changeset, :value))
+
+    cond do
+      has_option? and has_value? ->
+        add_error(changeset, :ballot_option_id, "cannot be combined with value")
+
+      has_option? or has_value? ->
+        changeset
+
+      true ->
+        add_error(changeset, :ballot_option_id, "or value must be present")
+    end
+  end
+
+  defp validate_value_selection_mode(changeset) do
+    if get_field(changeset, :value) && get_field(changeset, :selection_mode) != "single_choice" do
+      add_error(changeset, :selection_mode, "must be single choice for value votes")
     else
-      add_error(changeset, :ballot_option_id, "or value must be present")
+      changeset
     end
   end
 end

@@ -28,7 +28,7 @@ mix precommit
 
 ## Testes end to end
 
-O projeto já está configurado para rodar servidor para testes automaticamente, portanto `mix test` e `mix precommit` rodam todos testes incluindo os E2E. Eles ficam na pasta `test/feature`.
+O projeto já está configurado para rodar servidor para testes automaticamente, portanto `mix test` e `mix precommit` rodam todos testes incluindo os E2E. Eles ficam na pasta `test/escalimetro_web/playwright`.
 
 Debug de erro não é o forte dessa abordagem, mas se necessário utilize `@tag trace: :open` no teste problemático para abrir o chrome e entender o problema.
 

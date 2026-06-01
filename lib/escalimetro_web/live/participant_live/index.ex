@@ -51,7 +51,7 @@ defmodule EscalimetroWeb.ParticipantLive.Index do
               :for={participant <- @active_participants}
               participant={participant}
               event={@event}
-              can_mutate?={@event.status != "completed"}
+              can_mutate?={@event.status != "closed"}
             />
           </div>
         </section>
@@ -152,8 +152,8 @@ defmodule EscalimetroWeb.ParticipantLive.Index do
          |> put_flash(:info, "Participante invalidado com sucesso.")
          |> assign_participants()}
 
-      {:error, :completed_event} ->
-        {:noreply, put_flash(socket, :error, "Eventos concluidos nao aceitam conciliacao.")}
+      {:error, :closed_event} ->
+        {:noreply, put_flash(socket, :error, "Eventos fechados nao aceitam conciliacao.")}
 
       _other ->
         {:noreply, put_flash(socket, :error, "Nao foi possivel invalidar participante.")}

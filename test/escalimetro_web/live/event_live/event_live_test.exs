@@ -56,16 +56,16 @@ defmodule EscalimetroWeb.EventLiveTest do
     ballot = ballot_fixture(scope, event)
 
     {:ok, view, _html} = live(conn, ~p"/events/#{event}")
-    assert has_element?(view, "#event-complete-button")
+    assert has_element?(view, "#event-close-button")
     assert has_element?(view, "#event-results-link")
 
     view
-    |> element("#event-complete-button")
+    |> element("#event-close-button")
     |> render_click()
 
-    assert Repo.get!(Event, event.id).status == "completed"
+    assert Repo.get!(Event, event.id).status == "closed"
     assert Repo.get!(Ballot, ballot.id).status == "closed"
-    refute has_element?(view, "#event-complete-button")
+    refute has_element?(view, "#event-close-button")
   end
 
   test "user closes an individual ballot without closing others", %{conn: conn, scope: scope} do
@@ -87,14 +87,14 @@ defmodule EscalimetroWeb.EventLiveTest do
     assert has_element?(view, "#ballot-reopen-button-#{ballot.id}")
   end
 
-  test "completed event cannot be edited", %{conn: conn, scope: scope} do
+  test "closed event cannot be edited", %{conn: conn, scope: scope} do
     event = event_fixture(scope)
-    {:ok, completed_event} = Escalimetro.Events.complete_event(scope, event)
+    {:ok, closed_event} = Escalimetro.Events.close_event(scope, event)
 
     assert {:error, {:live_redirect, %{to: path, flash: flash}}} =
-             live(conn, ~p"/events/#{completed_event}/edit")
+             live(conn, ~p"/events/#{closed_event}/edit")
 
-    assert path == ~p"/events/#{completed_event}"
-    assert %{"error" => "Eventos concluidos nao podem ser editados."} = flash
+    assert path == ~p"/events/#{closed_event}"
+    assert %{"error" => "Eventos fechados nao podem ser editados."} = flash
   end
 end

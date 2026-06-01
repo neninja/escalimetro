@@ -21,12 +21,12 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     |> within("#registration_form", fn conn ->
       conn
       |> fill_in("Email", with: email)
-      |> click_button("Create an account")
+      |> click_button("Criar conta")
     end)
     |> assert_path(~p"/users/log-in")
-    |> assert_has("#flash-info", text: "An email was sent to #{email}")
+    |> assert_has("#flash-info", text: "Enviamos um email para #{email}")
 
-    assert_email_sent(subject: "Confirmation instructions")
+    assert_email_sent(subject: "Instrucoes de confirmacao")
   end
 
   test "registration validates invalid and duplicated email", %{conn: conn} do
@@ -40,7 +40,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
       |> fill_in("Email", with: "with spaces")
       |> assert_has("p", text: "must have the @ sign and no spaces")
       |> fill_in("Email", with: existing_user.email)
-      |> click_button("Create an account")
+      |> click_button("Criar conta")
     end)
     |> assert_has("p", text: "has already been taken")
   end
@@ -52,7 +52,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     |> log_in_with_password(user.email)
     |> visit(~p"/users/settings")
     |> assert_has("#email_form")
-    |> click_link("Log out")
+    |> click_link("Sair")
     |> assert_path(~p"/")
   end
 
@@ -63,7 +63,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     |> submit_password_login(user.email, "incorrect password")
     |> assert_path(~p"/users/log-in")
     |> assert_has("#login_form_password")
-    |> assert_has("#flash-error", text: "Invalid email or password")
+    |> assert_has("#flash-error", text: "Email ou senha invalidos")
   end
 
   test "authenticated user updates email and confirms the change", %{conn: conn} do
@@ -77,18 +77,18 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     |> within("#email_form", fn conn ->
       conn
       |> fill_in("Email", with: new_email)
-      |> click_button("Change Email")
+      |> click_button("Alterar email")
     end)
-    |> assert_has("#flash-info", text: "A link to confirm your email change has been sent")
+    |> assert_has("#flash-info", text: "Enviamos um link para confirmar a alteracao")
 
     assert {:email, email} = assert_email_sent()
-    assert email.subject == "Update email instructions"
+    assert email.subject == "Instrucoes para alterar email"
     token = extract_url_token!(email.text_body, "/users/settings/confirm-email/")
 
     conn
     |> visit(~p"/users/settings/confirm-email/#{token}")
     |> assert_path(~p"/users/settings")
-    |> assert_has("#flash-info", text: "Email changed successfully.")
+    |> assert_has("#flash-info", text: "Email alterado com sucesso.")
 
     refute Accounts.get_user_by_email(user.email)
     assert Accounts.get_user_by_email(new_email)
@@ -103,12 +103,12 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     |> visit(~p"/users/settings")
     |> within("#password_form", fn conn ->
       conn
-      |> fill_in("New password", with: new_password)
-      |> fill_in("Confirm new password", with: new_password)
-      |> click_button("Save Password")
+      |> fill_in("Nova senha", with: new_password)
+      |> fill_in("Confirmar nova senha", with: new_password)
+      |> click_button("Salvar senha")
     end)
     |> assert_path(~p"/users/settings")
-    |> assert_has("#flash-info", text: "Password updated successfully")
+    |> assert_has("#flash-info", text: "Senha atualizada com sucesso.")
 
     assert Accounts.get_user_by_email_and_password(user.email, new_password)
   end
@@ -117,7 +117,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     conn
     |> visit(~p"/users/settings")
     |> assert_path(~p"/users/log-in")
-    |> assert_has("#flash-error", text: "You must log in to access this page.")
+    |> assert_has("#flash-error", text: "Voce precisa entrar para acessar esta pagina.")
   end
 
   test "user logs in from magic link", %{conn: conn} do
@@ -127,15 +127,15 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     conn
     |> visit(~p"/users/log-in/#{token}")
     |> assert_has("#login_form")
-    |> click_button("Log me in only this time")
-    |> assert_path(~p"/")
+    |> click_button("Entrar apenas desta vez")
+    |> assert_path(~p"/events")
   end
 
   test "invalid magic link redirects to login", %{conn: conn} do
     conn
     |> visit(~p"/users/log-in/not-a-real-token")
     |> assert_path(~p"/users/log-in")
-    |> assert_has("#flash-error", text: "Magic link is invalid or it has expired.")
+    |> assert_has("#flash-error", text: "O link de acesso e invalido ou expirou.")
   end
 
   test "registered user can request a magic link", %{conn: conn} do
@@ -147,22 +147,22 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     |> within("#login_form_magic", fn conn ->
       conn
       |> fill_in("Email", with: user.email)
-      |> click_button("Log in with email")
+      |> click_button("Entrar com email")
     end)
     |> assert_path(~p"/users/log-in")
-    |> assert_has("#flash-info", text: "If your email is in our system")
+    |> assert_has("#flash-info", text: "Se o email estiver cadastrado")
 
     assert UserToken
            |> Repo.get_by!(user_id: user.id)
            |> Map.fetch!(:context) == "login"
 
-    assert_email_sent(subject: "Log in instructions")
+    assert_email_sent(subject: "Instrucoes de acesso")
   end
 
   defp log_in_with_password(conn, email, password \\ valid_user_password()) do
     conn
     |> submit_password_login(email, password)
-    |> assert_path(~p"/", timeout: 5_000)
+    |> assert_path(~p"/events", timeout: 5_000)
   end
 
   defp log_in_with_magic_link(conn, user) do
@@ -171,8 +171,8 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     conn
     |> visit(~p"/users/log-in/#{token}")
     |> assert_has("#login_form")
-    |> click_button("Log me in only this time")
-    |> assert_path(~p"/")
+    |> click_button("Entrar apenas desta vez")
+    |> assert_path(~p"/events")
   end
 
   defp submit_password_login(conn, email, password) do
@@ -182,7 +182,7 @@ defmodule EscalimetroWeb.Playwright.UserAuthFlowTest do
     |> within("#login_form_password", fn conn ->
       conn
       |> fill_in("Email", with: email)
-      |> fill_in("Password", with: password)
+      |> fill_in("Senha", with: password)
     end)
     |> evaluate(
       "HTMLFormElement.prototype.submit.call(document.querySelector('#login_form_password'))"

@@ -27,7 +27,7 @@ defmodule EscalimetroWeb.BallotLive.FormTest do
         ballot: %{
           title: title,
           kind: "multiple_choice",
-          allow_sugestion: "true",
+          allow_suggestion: "true",
           position: "0",
           options: %{
             "0" => %{label: "Manha", position: "0"},
@@ -40,7 +40,7 @@ defmodule EscalimetroWeb.BallotLive.FormTest do
     ballot = Repo.get_by!(Ballot, title: title)
     options = Repo.all(from option in BallotOption, where: option.ballot_id == ^ballot.id)
 
-    assert ballot.allow_sugestion
+    assert ballot.allow_suggestion
     assert Enum.map(options, & &1.label) |> Enum.sort() == ["Manha", "Noite"]
     assert {:ok, _show, _html} = follow_redirect(redirect, conn, ~p"/events/#{event}")
   end
