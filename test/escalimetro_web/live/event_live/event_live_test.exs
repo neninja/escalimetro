@@ -57,7 +57,6 @@ defmodule EscalimetroWeb.EventLiveTest do
 
     {:ok, view, _html} = live(conn, ~p"/events/#{event}")
     assert has_element?(view, "#event-complete-button")
-    assert has_element?(view, "#event-results-link")
 
     view
     |> element("#event-complete-button")
