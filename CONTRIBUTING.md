@@ -10,7 +10,7 @@ Igual ao disposto no [README](./README.md)
 
 ### Banco
 
-- `mix fresh` recria banco com seed de desenvolvimento
+- `mix fresh` recria banco com seed
 
 ### Debug
 
