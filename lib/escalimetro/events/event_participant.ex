@@ -59,14 +59,9 @@ defmodule Escalimetro.Events.EventParticipant do
 
   defp validate_identity(changeset) do
     case get_field(changeset, :kind) do
-      "guest" ->
-        changeset |> validate_required([:display_name]) |> validate_length(:display_name, min: 2)
-
-      "user" ->
-        validate_required(changeset, [:user_id])
-
-      _ ->
-        changeset
+      "guest" -> validate_required(changeset, [:display_name])
+      "user" -> validate_required(changeset, [:user_id])
+      _ -> changeset
     end
   end
 

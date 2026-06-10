@@ -25,24 +25,11 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/escalimetro"
 import topbar from "../vendor/topbar"
 
-const CopyInviteUrl = {
-  mounted() {
-    this.el.addEventListener("click", () => {
-      const target = document.getElementById(this.el.dataset.copyTarget)
-      const value = target?.value || target?.textContent || ""
-
-      if (value && navigator.clipboard) {
-        navigator.clipboard.writeText(value)
-      }
-    })
-  },
-}
-
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, CopyInviteUrl},
+  hooks: {...colocatedHooks},
 })
 
 // Show progress bar on live navigation and form submits
@@ -93,3 +80,4 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
+

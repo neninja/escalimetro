@@ -13,7 +13,6 @@ defmodule Escalimetro.Events do
     BallotOption,
     Event,
     EventAdmin,
-    EventInvite,
     EventParticipant,
     Topics,
     Vote
@@ -114,98 +113,6 @@ defmodule Escalimetro.Events do
       votes_by_ballot: Map.new(votes, &{&1.ballot_id, &1})
     }
   end
-
-  ## Invites
-
-  def get_active_event_invite(%Scope{} = scope, %Event{} = event) do
-    if can_manage_event?(scope, event) do
-      event.id
-      |> active_event_invites_query()
-      |> preload([:created_by_user])
-      |> Repo.one()
-    end
-  end
-
-  def get_active_invite_by_token(token) when is_binary(token) do
-    token_hash = hash_invite_token(token)
-
-    EventInvite
-    |> where(token_hash: ^token_hash, status: "active")
-    |> where([invite], is_nil(invite.invalidated_at))
-    |> preload([:event, :created_by_user])
-    |> Repo.one()
-  end
-
-  def get_active_invite_by_token(_token), do: nil
-
-  def rotate_event_invite(%Scope{} = scope, %Event{} = event) do
-    with :ok <- authorize_event_management(scope, event) do
-      token = generate_invite_token()
-      now = DateTime.utc_now(:second)
-
-      Multi.new()
-      |> Multi.update_all(:old_invites, active_event_invites_query(event.id),
-        set: [status: "invalidated", invalidated_at: now, updated_at: now]
-      )
-      |> Multi.insert(
-        :invite,
-        EventInvite.changeset(
-          %EventInvite{event_id: event.id, created_by_user_id: scope.user.id},
-          %{token_hash: hash_invite_token(token), status: "active"}
-        )
-      )
-      |> Repo.transaction()
-      |> case do
-        {:ok, %{invite: invite}} -> {:ok, %{invite | token: token}}
-        {:error, _operation, changeset, _changes} -> {:error, changeset}
-      end
-    end
-  end
-
-  def invalidate_event_invite(%Scope{} = scope, %Event{} = event) do
-    with :ok <- authorize_event_management(scope, event) do
-      case get_active_event_invite(scope, event) do
-        nil ->
-          {:ok, nil}
-
-        %EventInvite{} = invite ->
-          invite
-          |> EventInvite.invalidate_changeset(DateTime.utc_now(:second))
-          |> Repo.update()
-      end
-    end
-  end
-
-  def change_guest_identification(attrs \\ %{}) do
-    %EventParticipant{
-      event_id: -1,
-      participant_token: "temporary",
-      kind: "guest",
-      status: "active"
-    }
-    |> EventParticipant.changeset(normalize_guest_identification_attrs(attrs))
-  end
-
-  def enter_event_invite(scope, invite, attrs \\ %{})
-
-  def enter_event_invite(scope, %EventInvite{id: invite_id}, attrs) do
-    invite =
-      EventInvite
-      |> Repo.get!(invite_id)
-      |> Repo.preload(:event)
-
-    with :ok <- ensure_invite_active(invite) do
-      case scope do
-        %Scope{user: %User{} = user} ->
-          enter_authenticated_invite(invite, user)
-
-        _scope ->
-          enter_guest_invite(invite, attrs)
-      end
-    end
-  end
-
-  def enter_event_invite(_scope, _invite, _attrs), do: {:error, :invalid_invite}
 
   def can_manage_event?(%Scope{user: %User{id: user_id}}, %Event{owner_user_id: user_id}),
     do: true
@@ -595,90 +502,6 @@ defmodule Escalimetro.Events do
     Repo.get!(Event, event_id)
   end
 
-  defp ensure_invite_active(%EventInvite{status: "active", invalidated_at: nil}), do: :ok
-  defp ensure_invite_active(%EventInvite{}), do: {:error, :invalid_invite}
-
-  defp enter_authenticated_invite(%EventInvite{event: %Event{} = event}, %User{} = user) do
-    case get_user_event_participant(event, user) do
-      %EventParticipant{} = participant ->
-        {:ok, participant}
-
-      nil ->
-        create_invite_user_participant(event, user)
-    end
-  end
-
-  defp enter_guest_invite(%EventInvite{event: %Event{} = event}, attrs) do
-    attrs = normalize_guest_identification_attrs(attrs)
-
-    changeset = change_guest_identification(attrs)
-
-    if changeset.valid? do
-      display_name = Changeset.get_field(changeset, :display_name)
-
-      case get_guest_event_participant(event, display_name) do
-        %EventParticipant{} = participant ->
-          {:ok, participant}
-
-        nil ->
-          create_invite_guest_participant(event, display_name)
-      end
-    else
-      {:error, changeset}
-    end
-  end
-
-  defp get_user_event_participant(%Event{id: event_id}, %User{id: user_id}) do
-    EventParticipant
-    |> where(event_id: ^event_id, user_id: ^user_id, kind: "user")
-    |> Repo.one()
-  end
-
-  defp create_invite_user_participant(%Event{id: event_id}, %User{} = user) do
-    %EventParticipant{
-      event_id: event_id,
-      user_id: user.id,
-      participant_token: generate_participant_token()
-    }
-    |> EventParticipant.changeset(%{
-      kind: "user",
-      display_name: user.email,
-      status: "active"
-    })
-    |> Repo.insert()
-  end
-
-  defp get_guest_event_participant(%Event{id: event_id}, display_name) do
-    EventParticipant
-    |> where(event_id: ^event_id, kind: "guest", display_name: ^display_name)
-    |> order_by([participant], asc: participant.inserted_at)
-    |> limit(1)
-    |> Repo.one()
-  end
-
-  defp create_invite_guest_participant(%Event{id: event_id}, display_name) do
-    %EventParticipant{event_id: event_id, participant_token: generate_participant_token()}
-    |> EventParticipant.changeset(%{
-      kind: "guest",
-      display_name: display_name,
-      status: "active"
-    })
-    |> Repo.insert()
-  end
-
-  defp normalize_guest_identification_attrs(%{} = attrs) do
-    display_name =
-      attrs
-      |> fetch_param(:display_name, "display_name")
-      |> value_or("")
-      |> to_string()
-      |> String.trim()
-
-    put_param(attrs, :display_name, "display_name", display_name)
-  end
-
-  defp normalize_guest_identification_attrs(attrs), do: attrs
-
   defp normalize_vote_attrs(%Ballot{kind: "multiple_choice"} = ballot, attrs) do
     option_id =
       attrs
@@ -878,13 +701,6 @@ defmodule Escalimetro.Events do
   defp open_ballots_query(event_id) do
     from ballot in Ballot,
       where: ballot.event_id == ^event_id and ballot.status == "open"
-  end
-
-  defp active_event_invites_query(event_id) do
-    from invite in EventInvite,
-      where:
-        invite.event_id == ^event_id and invite.status == "active" and
-          is_nil(invite.invalidated_at)
   end
 
   defp active_participant_votes_query(participant_id) do
@@ -1138,18 +954,6 @@ defmodule Escalimetro.Events do
   defp parse_optional_integer(nil), do: nil
   defp parse_optional_integer(""), do: nil
   defp parse_optional_integer(value), do: parse_integer(value, nil)
-
-  defp generate_invite_token do
-    24
-    |> :crypto.strong_rand_bytes()
-    |> Base.url_encode64(padding: false)
-  end
-
-  defp hash_invite_token(token) when is_binary(token) do
-    :sha256
-    |> :crypto.hash(token)
-    |> Base.encode16(case: :lower)
-  end
 
   defp cast_boolean(value, _default) when is_boolean(value), do: value
 
