@@ -17,6 +17,12 @@ defmodule EscalimetroWeb.Router do
     plug :accepts, ["json"]
   end
 
+  scope "/", EscalimetroWeb do
+    pipe_through :browser
+
+    get "/", PageController, :home
+  end
+
   # Other scopes may use custom stacks.
   # scope "/api", EscalimetroWeb do
   #   pipe_through :api
@@ -42,13 +48,10 @@ defmodule EscalimetroWeb.Router do
   ## Authentication routes
 
   scope "/", EscalimetroWeb do
-    pipe_through [:browser, :require_authenticated_user, :require_confirmed_user]
+    pipe_through [:browser, :require_authenticated_user]
 
     live_session :require_authenticated_user,
-      on_mount: [
-        {EscalimetroWeb.UserAuth, :require_authenticated},
-        {EscalimetroWeb.UserAuth, :require_confirmed}
-      ] do
+      on_mount: [{EscalimetroWeb.UserAuth, :require_authenticated}] do
       live "/events", EventLive.Index, :index
       live "/events/new", EventLive.Form, :new
       live "/events/:id", EventLive.Show, :show
@@ -76,10 +79,8 @@ defmodule EscalimetroWeb.Router do
 
     live_session :current_user,
       on_mount: [{EscalimetroWeb.UserAuth, :mount_current_scope}] do
-      live "/", HomeLive, :show
       live "/join/:token", InviteLive.Join, :show
       live "/events/public/:participant_token", ParticipantLive.Event, :show
-      live "/results/:token", ResultsLive.Show, :public
 
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new

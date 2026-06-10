@@ -87,10 +87,10 @@ defmodule EscalimetroWeb.EventLive.Form do
   @impl true
   def mount(%{"id" => id}, _session, socket) do
     case fetch_event(socket, id) do
-      {:ok, %Event{status: "closed"} = event} ->
+      {:ok, %Event{status: "completed"} = event} ->
         {:ok,
          socket
-         |> put_flash(:error, "Eventos fechados nao podem ser editados.")
+         |> put_flash(:error, "Eventos concluidos nao podem ser editados.")
          |> push_navigate(to: ~p"/events/#{event}")}
 
       {:ok, event} ->
@@ -160,10 +160,10 @@ defmodule EscalimetroWeb.EventLive.Form do
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply, assign(socket, :form, to_form(changeset, action: :insert))}
 
-      {:error, :closed_event} ->
+      {:error, :completed_event} ->
         {:noreply,
          socket
-         |> put_flash(:error, "Eventos fechados nao podem ser editados.")
+         |> put_flash(:error, "Eventos concluidos nao podem ser editados.")
          |> push_navigate(to: ~p"/events/#{socket.assigns.event}")}
 
       {:error, :unauthorized} ->

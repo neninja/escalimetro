@@ -47,7 +47,7 @@ defmodule EscalimetroWeb.ModerationLive.IndexTest do
 
   test "user rejects a suggested option and active votes for it", %{conn: conn, scope: scope} do
     event = event_fixture(scope)
-    ballot = ballot_fixture(scope, event, %{allow_suggestion: true})
+    ballot = ballot_fixture(scope, event, %{allow_sugestion: true})
     participant = event_participant_fixture(scope, event)
     voter = event_participant_fixture(scope, event)
 

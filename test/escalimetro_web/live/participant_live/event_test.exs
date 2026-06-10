@@ -63,51 +63,6 @@ defmodule EscalimetroWeb.ParticipantLive.EventTest do
              Repo.get_by!(Vote, participant_id: participant.id, ballot_id: ballot.id)
   end
 
-  test "participant sees live counts details and can remove a vote", %{conn: conn} do
-    scope = Escalimetro.AccountsFixtures.user_scope_fixture()
-    event = event_fixture(scope)
-
-    ballot =
-      ballot_fixture(scope, event, %{
-        selection_mode: "multi_choice",
-        show_justifications: true
-      })
-
-    participant = event_participant_fixture(scope, event, %{display_name: "Ana"})
-    [option | _] = ballot.options
-
-    {:ok, view, _html} = live(conn, ~p"/events/public/#{participant.participant_token}")
-
-    view
-    |> form("#vote-form-#{ballot.id}",
-      vote: %{
-        ballot_option_id: option.id,
-        intensity: "true",
-        justification: "Muito importante"
-      }
-    )
-    |> render_submit()
-
-    assert has_element?(view, "#participant-ballot-results-#{ballot.id}", "1 voto(s)")
-
-    assert has_element?(
-             view,
-             "#participant-result-option-#{ballot.id}-option-#{option.id}",
-             "Ana"
-           )
-
-    assert has_element?(view, "[id^=participant-result-vote-]", "Muito importante")
-
-    view
-    |> element("#vote-remove-option-button-#{option.id}")
-    |> render_click()
-
-    assert has_element?(view, "#participant-ballot-results-#{ballot.id}", "0 voto(s)")
-
-    assert %Vote{rejection_reason: "Voto removido"} =
-             Repo.get_by!(Vote, participant_id: participant.id, ballot_id: ballot.id)
-  end
-
   test "intensity changes appear in another connected participant view", %{conn: conn} do
     scope = Escalimetro.AccountsFixtures.user_scope_fixture()
     event = event_fixture(scope)
@@ -146,7 +101,7 @@ defmodule EscalimetroWeb.ParticipantLive.EventTest do
   } do
     scope = Escalimetro.AccountsFixtures.user_scope_fixture()
     event = event_fixture(scope)
-    ballot = ballot_fixture(scope, event, %{allow_suggestion: true})
+    ballot = ballot_fixture(scope, event, %{allow_sugestion: true})
     participant = event_participant_fixture(scope, event)
     other_participant = event_participant_fixture(scope, event)
 

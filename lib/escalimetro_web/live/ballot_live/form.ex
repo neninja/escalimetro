@@ -69,41 +69,11 @@ defmodule EscalimetroWeb.BallotLive.Form do
             />
           </div>
 
-          <div class="grid gap-3 rounded-lg border border-base-content/10 bg-base-200/40 p-4 sm:grid-cols-2">
-            <.input
-              :if={@selected_kind == "multiple_choice"}
-              field={@form[:selection_mode]}
-              id="ballot-selection-mode-input"
-              type="select"
-              label="Modo de selecao"
-              options={[
-                {"Resposta unica", "single_choice"},
-                {"Varias respostas", "multi_choice"}
-              ]}
-            />
-
-            <div
-              :if={@selected_kind == "yes_no_maybe"}
-              id="ballot-selection-mode-fixed"
-              class="rounded-md bg-base-100 px-3 py-2 text-sm"
-            >
-              <p class="font-semibold">Modo de selecao</p>
-              <p class="mt-1 text-base-content/60">Resposta unica</p>
-            </div>
-
-            <.input
-              :if={@selected_kind == "multiple_choice"}
-              field={@form[:allow_suggestion]}
-              type="checkbox"
-              label="Permitir sugestoes de novas opcoes"
-            />
-
-            <.input
-              field={@form[:show_justifications]}
-              type="checkbox"
-              label="Mostrar justificativas para participantes"
-            />
-          </div>
+          <.input
+            field={@form[:allow_sugestion]}
+            type="checkbox"
+            label="Permitir sugestoes de novas opcoes"
+          />
 
           <div :if={@selected_kind == "multiple_choice"} class="space-y-3">
             <div class="flex items-center justify-between gap-4">
@@ -195,7 +165,7 @@ defmodule EscalimetroWeb.BallotLive.Form do
   @impl true
   def mount(%{"event_id" => event_id, "id" => id}, _session, socket) do
     with {:ok, event} <- fetch_event(socket, event_id),
-         {:editable, true} <- {:editable, event.status != "closed"} do
+         {:editable, true} <- {:editable, event.status != "completed"} do
       ballot = Events.get_ballot!(socket.assigns.current_scope, event, id)
 
       {:ok,
@@ -205,14 +175,14 @@ defmodule EscalimetroWeb.BallotLive.Form do
        |> assign(:page_title, "Editar pauta")
        |> assign_form(ballot, %{})}
     else
-      {:editable, false} -> {:ok, redirect_closed_event(socket, event_id)}
+      {:editable, false} -> {:ok, redirect_completed_event(socket, event_id)}
       :error -> {:ok, redirect_to_events(socket)}
     end
   end
 
   def mount(%{"event_id" => event_id}, _session, socket) do
     with {:ok, event} <- fetch_event(socket, event_id),
-         {:editable, true} <- {:editable, event.status != "closed"} do
+         {:editable, true} <- {:editable, event.status != "completed"} do
       ballot = %Ballot{position: next_position(socket.assigns.current_scope, event)}
 
       {:ok,
@@ -222,7 +192,7 @@ defmodule EscalimetroWeb.BallotLive.Form do
        |> assign(:page_title, "Nova pauta")
        |> assign_form(ballot, %{})}
     else
-      {:editable, false} -> {:ok, redirect_closed_event(socket, event_id)}
+      {:editable, false} -> {:ok, redirect_completed_event(socket, event_id)}
       :error -> {:ok, redirect_to_events(socket)}
     end
   end
@@ -264,8 +234,8 @@ defmodule EscalimetroWeb.BallotLive.Form do
         {:noreply,
          assign_changeset_form(socket, Map.put(changeset, :action, :insert), ballot_params)}
 
-      {:error, :closed_event} ->
-        {:noreply, redirect_closed_event(socket, socket.assigns.event.id)}
+      {:error, :completed_event} ->
+        {:noreply, redirect_completed_event(socket, socket.assigns.event.id)}
     end
   end
 
@@ -281,8 +251,8 @@ defmodule EscalimetroWeb.BallotLive.Form do
         {:noreply,
          assign_changeset_form(socket, Map.put(changeset, :action, :insert), ballot_params)}
 
-      {:error, :closed_event} ->
-        {:noreply, redirect_closed_event(socket, socket.assigns.event.id)}
+      {:error, :completed_event} ->
+        {:noreply, redirect_completed_event(socket, socket.assigns.event.id)}
     end
   end
 
@@ -323,9 +293,9 @@ defmodule EscalimetroWeb.BallotLive.Form do
     |> push_navigate(to: ~p"/events")
   end
 
-  defp redirect_closed_event(socket, event_id) do
+  defp redirect_completed_event(socket, event_id) do
     socket
-    |> put_flash(:error, "Eventos fechados nao podem receber alteracoes de pauta.")
+    |> put_flash(:error, "Eventos concluidos nao podem receber alteracoes de pauta.")
     |> push_navigate(to: ~p"/events/#{event_id}")
   end
 
@@ -344,13 +314,8 @@ defmodule EscalimetroWeb.BallotLive.Form do
 
   defp fallback_option_rows([], changeset) do
     case Map.get(changeset.data, :options, []) do
-      %Ecto.Association.NotLoaded{} ->
-        []
-
-      options ->
-        options
-        |> Enum.reject(& &1.rejected_at)
-        |> Enum.map(&%{id: &1.id, label: &1.label})
+      %Ecto.Association.NotLoaded{} -> []
+      options -> Enum.map(options, &%{id: &1.id, label: &1.label})
     end
   end
 

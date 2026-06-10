@@ -15,26 +15,21 @@ defmodule EscalimetroWeb.Playwright.EventManagementFlowTest do
     event = event_fixture(scope)
     title = unique_ballot_title()
 
-    session =
-      conn
-      |> log_in_with_magic_link(user)
-      |> visit(~p"/events/#{event}")
-      |> click_link("Nova pauta")
-      |> assert_path(~p"/events/#{event}/ballots/new")
-      |> within("#ballot-form", fn session ->
-        session
-        |> fill_in("Titulo da pauta", with: title)
-        |> fill_in("Opcao 1", with: "Manha")
-        |> fill_in("Opcao 2", with: "Noite")
-        |> click_button("Salvar pauta")
-      end)
-      |> assert_has("#flash-info", text: "Pauta criada com sucesso.")
-      |> assert_path(~p"/events/#{event}", timeout: 5_000)
-
-    ballot = Repo.get_by!(Ballot, title: title)
-
-    session
-    |> click_button("#ballot-close-button-#{ballot.id}", "Fechar")
+    conn
+    |> log_in_with_magic_link(user)
+    |> visit(~p"/events/#{event}")
+    |> click_link("Nova pauta")
+    |> assert_path(~p"/events/#{event}/ballots/new")
+    |> within("#ballot-form", fn session ->
+      session
+      |> fill_in("Titulo da pauta", with: title)
+      |> fill_in("Opcao 1", with: "Manha")
+      |> fill_in("Opcao 2", with: "Noite")
+      |> click_button("Salvar pauta")
+    end)
+    |> assert_has("#flash-info", text: "Pauta criada com sucesso.")
+    |> assert_path(~p"/events/#{event}", timeout: 5_000)
+    |> click_button("Fechar")
     |> assert_has("#flash-info", text: "Pauta fechada com sucesso.")
 
     assert Repo.get_by!(Ballot, title: title).status == "closed"
@@ -86,7 +81,7 @@ defmodule EscalimetroWeb.Playwright.EventManagementFlowTest do
     session
     |> visit(~p"/users/log-in/#{token}")
     |> assert_has("#login_form")
-    |> click_button("Entrar apenas desta vez")
-    |> assert_path(~p"/events", timeout: 5_000)
+    |> click_button("Log me in only this time")
+    |> assert_path(~p"/", timeout: 5_000)
   end
 end

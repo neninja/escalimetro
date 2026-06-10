@@ -6,15 +6,15 @@ defmodule Escalimetro.Events.Event do
   alias Escalimetro.Accounts.User
   alias Escalimetro.Events.{Ballot, EventAdmin, EventInvite, EventParticipant, Vote}
 
-  @statuses ~w(open closed)
+  @statuses ~w(draft open completed)
 
   schema "events" do
     field :title, :string
     field :description, :string
     field :scheduled_at, :utc_datetime
     field :location, :string
-    field :status, :string, default: "open"
-    field :closed_at, :utc_datetime
+    field :status, :string, default: "draft"
+    field :completed_at, :utc_datetime
 
     belongs_to :owner_user, User
     has_many :event_admins, EventAdmin
@@ -33,36 +33,28 @@ defmodule Escalimetro.Events.Event do
     attrs = normalize_datetime_local(attrs, :scheduled_at)
 
     event
-    |> cast(attrs, [:title, :description, :scheduled_at, :location, :status, :closed_at])
+    |> cast(attrs, [:title, :description, :scheduled_at, :location, :status, :completed_at])
     |> validate_required([:title, :status, :owner_user_id])
     |> validate_length(:title, max: 160)
     |> validate_length(:description, max: 5_000)
     |> validate_length(:location, max: 160)
     |> validate_inclusion(:status, @statuses)
-    |> validate_closed_at()
+    |> validate_completed_at()
     |> foreign_key_constraint(:owner_user_id)
     |> check_constraint(:status, name: :events_status_check)
   end
 
-  def close_changeset(event, closed_at) do
+  def complete_changeset(event, completed_at) do
     event
-    |> change(status: "closed", closed_at: closed_at)
-    |> validate_required([:title, :status, :owner_user_id, :closed_at])
+    |> change(status: "completed", completed_at: completed_at)
+    |> validate_required([:title, :status, :owner_user_id, :completed_at])
     |> validate_inclusion(:status, @statuses)
     |> check_constraint(:status, name: :events_status_check)
   end
 
-  def reopen_changeset(event) do
-    event
-    |> change(status: "open", closed_at: nil)
-    |> validate_required([:title, :status, :owner_user_id])
-    |> validate_inclusion(:status, @statuses)
-    |> check_constraint(:status, name: :events_status_check)
-  end
-
-  defp validate_closed_at(changeset) do
-    if get_field(changeset, :status) == "closed" do
-      validate_required(changeset, [:closed_at])
+  defp validate_completed_at(changeset) do
+    if get_field(changeset, :status) == "completed" do
+      validate_required(changeset, [:completed_at])
     else
       changeset
     end

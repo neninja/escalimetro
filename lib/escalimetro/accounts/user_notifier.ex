@@ -22,17 +22,17 @@ defmodule Escalimetro.Accounts.UserNotifier do
   Deliver instructions to update a user email.
   """
   def deliver_update_email_instructions(user, url) do
-    deliver(user.email, "Instrucoes para alterar email", """
+    deliver(user.email, "Update email instructions", """
 
     ==============================
 
-    Ola #{user.email},
+    Hi #{user.email},
 
-    Altere seu email acessando o link abaixo:
+    You can change your email by visiting the URL below:
 
     #{url}
 
-    Se voce nao solicitou essa alteracao, ignore esta mensagem.
+    If you didn't request this change, please ignore this.
 
     ==============================
     """)
@@ -49,34 +49,34 @@ defmodule Escalimetro.Accounts.UserNotifier do
   end
 
   defp deliver_magic_link_instructions(user, url) do
-    deliver(user.email, "Instrucoes de acesso", """
+    deliver(user.email, "Log in instructions", """
 
     ==============================
 
-    Ola #{user.email},
+    Hi #{user.email},
 
-    Acesse sua conta pelo link abaixo:
+    You can log into your account by visiting the URL below:
 
     #{url}
 
-    Se voce nao solicitou este email, ignore esta mensagem.
+    If you didn't request this email, please ignore this.
 
     ==============================
     """)
   end
 
   defp deliver_confirmation_instructions(user, url) do
-    deliver(user.email, "Instrucoes de confirmacao", """
+    deliver(user.email, "Confirmation instructions", """
 
     ==============================
 
-    Ola #{user.email},
+    Hi #{user.email},
 
-    Confirme sua conta acessando o link abaixo:
+    You can confirm your account by visiting the URL below:
 
     #{url}
 
-    Se voce nao criou uma conta, ignore esta mensagem.
+    If you didn't create an account with us, please ignore this.
 
     ==============================
     """)

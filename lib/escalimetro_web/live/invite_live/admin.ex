@@ -55,16 +55,6 @@ defmodule EscalimetroWeb.InviteLive.Admin do
             para exibir um novo link copiavel.
           </p>
 
-          <.input
-            id="event-results-url"
-            name="invite[results_url]"
-            type="text"
-            label="Link publico de resultados"
-            value={@result_url || ""}
-            readonly
-            placeholder="Gere um novo link para copiar"
-          />
-
           <div class="mt-4 flex flex-col gap-2 sm:flex-row">
             <button
               id="event-invite-copy-button"
@@ -185,26 +175,20 @@ defmodule EscalimetroWeb.InviteLive.Admin do
 
   defp assign_invite(socket, %EventInvite{token: token} = invite) when is_binary(token) do
     invite_url = public_invite_url(token)
-    result_url = public_result_url(token)
 
     assign(socket,
       invite: invite,
       invite_url: invite_url,
-      result_url: result_url,
       qrcode_svg: QRCode.to_svg(invite_url)
     )
   end
 
   defp assign_invite(socket, invite) do
-    assign(socket, invite: invite, invite_url: nil, result_url: nil, qrcode_svg: nil)
+    assign(socket, invite: invite, invite_url: nil, qrcode_svg: nil)
   end
 
   defp public_invite_url(token) do
     EscalimetroWeb.Endpoint.url() <> ~p"/join/#{token}"
-  end
-
-  defp public_result_url(token) do
-    EscalimetroWeb.Endpoint.url() <> ~p"/results/#{token}"
   end
 
   defp fetch_event(socket, event_id) do

@@ -8,8 +8,8 @@ defmodule EscalimetroWeb.UserLive.RegistrationTest do
     test "renders registration page", %{conn: conn} do
       {:ok, _lv, html} = live(conn, ~p"/users/register")
 
-      assert html =~ "Criar conta"
-      assert html =~ "Entrar"
+      assert html =~ "Register"
+      assert html =~ "Log in"
     end
 
     test "redirects if already logged in", %{conn: conn} do
@@ -17,7 +17,7 @@ defmodule EscalimetroWeb.UserLive.RegistrationTest do
         conn
         |> log_in_user(user_fixture())
         |> live(~p"/users/register")
-        |> follow_redirect(conn, ~p"/events")
+        |> follow_redirect(conn, ~p"/")
 
       assert {:ok, _conn} = result
     end
@@ -30,7 +30,7 @@ defmodule EscalimetroWeb.UserLive.RegistrationTest do
         |> element("#registration_form")
         |> render_change(user: %{"email" => "with spaces"})
 
-      assert result =~ "Criar conta"
+      assert result =~ "Register"
       assert result =~ "must have the @ sign and no spaces"
     end
   end
@@ -47,7 +47,7 @@ defmodule EscalimetroWeb.UserLive.RegistrationTest do
         |> follow_redirect(conn, ~p"/users/log-in")
 
       assert html =~
-               ~r/Enviamos um email para .*\. Acesse o link para confirmar sua conta/
+               ~r/An email was sent to .*, please access it to confirm your account/
     end
 
     test "renders errors for duplicated email", %{conn: conn} do
@@ -67,16 +67,16 @@ defmodule EscalimetroWeb.UserLive.RegistrationTest do
   end
 
   describe "registration navigation" do
-    test "redirects to login page when the Entrar button is clicked", %{conn: conn} do
+    test "redirects to login page when the Log in button is clicked", %{conn: conn} do
       {:ok, lv, _html} = live(conn, ~p"/users/register")
 
       {:ok, _login_live, login_html} =
         lv
-        |> element("main a", "Entrar")
+        |> element("main a", "Log in")
         |> render_click()
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert login_html =~ "Entrar"
+      assert login_html =~ "Log in"
     end
   end
 end

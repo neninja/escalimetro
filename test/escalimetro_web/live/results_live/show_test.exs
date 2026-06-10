@@ -41,8 +41,6 @@ defmodule EscalimetroWeb.ResultsLive.ShowTest do
     assert has_element?(view, "#ballot-result-#{ballot.id}")
     assert has_element?(view, "#ballot-result-winner-#{ballot.id}", "Calabresa")
     assert has_element?(view, "#ballot-result-option-#{ballot.id}-option-#{option.id}")
-    assert has_element?(view, "#event-results-summary-copy-button[disabled]")
-    assert has_element?(view, "#event-results-export-image-button")
     refute has_element?(view, "#event-results-summary")
 
     view
@@ -50,7 +48,6 @@ defmodule EscalimetroWeb.ResultsLive.ShowTest do
     |> render_click()
 
     assert has_element?(view, "#event-results-summary")
-    refute has_element?(view, "#event-results-summary-copy-button[disabled]")
   end
 
   test "user sees rejected votes in the results report", %{conn: conn, scope: scope} do
@@ -66,36 +63,6 @@ defmodule EscalimetroWeb.ResultsLive.ShowTest do
     assert has_element?(view, "#ballot-result-empty-#{ballot.id}")
     assert has_element?(view, "#ballot-result-rejected-votes-#{ballot.id}")
     assert has_element?(view, "#ballot-result-rejected-vote-#{vote.id}", "Duplicado")
-  end
-
-  test "public results are available through an active invite", %{conn: conn, scope: scope} do
-    event = event_fixture(scope)
-    ballot = ballot_fixture(scope, event, %{show_justifications: true})
-    participant = event_participant_fixture(scope, event, %{display_name: "Ana"})
-    [option | _] = ballot.options
-
-    assert {:ok, invite} = Events.rotate_event_invite(scope, event)
-
-    assert {:ok, %Vote{} = vote} =
-             Events.create_vote(scope, event, participant, ballot, %{
-               ballot_option_id: option.id,
-               justification: "Preferencia publica"
-             })
-
-    {:ok, view, _html} = live(conn, ~p"/results/#{invite.token}")
-
-    assert has_element?(view, "#event-results")
-    assert has_element?(view, "#ballot-result-#{ballot.id}")
-    assert has_element?(view, "#ballot-result-option-vote-#{vote.id}", "Preferencia publica")
-    refute has_element?(view, "a[href='/events/#{event.id}/moderation']")
-  end
-
-  test "public results reject invalid invites", %{conn: conn} do
-    assert {:error, {:live_redirect, %{to: path, flash: flash}}} =
-             live(conn, ~p"/results/invalid-token")
-
-    assert path == ~p"/"
-    assert %{"error" => "Convite invalido ou expirado."} = flash
   end
 
   test "user cannot access results for another user's event", %{conn: conn} do

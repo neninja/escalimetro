@@ -67,38 +67,34 @@ defmodule EscalimetroWeb.Layouts do
       </.form>
     </div>
 
-    <header class="border-b border-base-content/10 bg-base-100/95 px-4 py-3 sm:px-6 lg:px-8">
-      <nav class="mx-auto flex max-w-7xl items-center justify-between gap-4" aria-label="Principal">
-        <.link navigate={~p"/"} class="flex items-center gap-3">
-          <span class="flex size-9 items-center justify-center rounded-md bg-base-content text-sm font-semibold text-base-100">
-            E
-          </span>
-          <span class="text-sm font-semibold tracking-normal">Escalimetro</span>
-        </.link>
-
-        <div class="flex items-center gap-2">
-          <.theme_toggle />
-
-          <%= if @current_scope && @current_scope.user do %>
-            <.link navigate={~p"/events"} class="btn btn-ghost btn-sm">Eventos</.link>
-            <.link
-              :if={@current_scope.user.system_admin}
-              navigate={~p"/backoffice"}
-              class="btn btn-ghost btn-sm"
-            >
-              Backoffice
-            </.link>
-            <.link navigate={~p"/users/settings"} class="btn btn-ghost btn-sm">Conta</.link>
-            <.link href={~p"/users/log-out"} method="delete" class="btn btn-soft btn-sm">Sair</.link>
-          <% else %>
-            <.link navigate={~p"/users/log-in"} class="btn btn-ghost btn-sm">Entrar</.link>
-            <.link navigate={~p"/users/register"} class="btn btn-primary btn-sm">Criar conta</.link>
-          <% end %>
-        </div>
-      </nav>
+    <header class="navbar px-4 sm:px-6 lg:px-8">
+      <div class="flex-1">
+        <a href="/" class="flex-1 flex w-fit items-center gap-2">
+          <img src={~p"/images/logo.svg"} width="36" />
+          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
+        </a>
+      </div>
+      <div class="flex-none">
+        <ul class="flex flex-column px-1 space-x-4 items-center">
+          <li>
+            <a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a>
+          </li>
+          <li>
+            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
+          </li>
+          <li>
+            <.theme_toggle />
+          </li>
+          <li>
+            <a href="https://hexdocs.pm/phoenix/overview.html" class="btn btn-primary">
+              Get Started <span aria-hidden="true">&rarr;</span>
+            </a>
+          </li>
+        </ul>
+      </div>
     </header>
 
-    <main class="px-4 py-10 sm:px-6 lg:px-8">
+    <main class="px-4 py-20 sm:px-6 lg:px-8">
       <div class={@container_class}>
         {render_slot(@inner_block)}
       </div>
@@ -130,24 +126,24 @@ defmodule EscalimetroWeb.Layouts do
       <.flash
         id="client-error"
         kind={:error}
-        title={gettext("Sem conexao")}
+        title={gettext("We can't find the internet")}
         phx-disconnected={show(".phx-client-error #client-error") |> JS.remove_attribute("hidden")}
         phx-connected={hide("#client-error") |> JS.set_attribute({"hidden", ""})}
         hidden
       >
-        {gettext("Tentando reconectar")}
+        {gettext("Attempting to reconnect")}
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
 
       <.flash
         id="server-error"
         kind={:error}
-        title={gettext("Algo deu errado")}
+        title={gettext("Something went wrong!")}
         phx-disconnected={show(".phx-server-error #server-error") |> JS.remove_attribute("hidden")}
         phx-connected={hide("#server-error") |> JS.set_attribute({"hidden", ""})}
         hidden
       >
-        {gettext("Tentando reconectar")}
+        {gettext("Attempting to reconnect")}
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
     </div>

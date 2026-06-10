@@ -5,11 +5,11 @@ defmodule EscalimetroWeb.UserSessionController do
   alias EscalimetroWeb.UserAuth
 
   def create(conn, %{"_action" => "confirmed"} = params) do
-    create(conn, params, "Conta confirmada com sucesso.")
+    create(conn, params, "User confirmed successfully.")
   end
 
   def create(conn, params) do
-    create(conn, params, "Bem-vindo de volta.")
+    create(conn, params, "Welcome back!")
   end
 
   # magic link login
@@ -24,7 +24,7 @@ defmodule EscalimetroWeb.UserSessionController do
 
       _ ->
         conn
-        |> put_flash(:error, "O link e invalido ou expirou.")
+        |> put_flash(:error, "The link is invalid or it has expired.")
         |> redirect(to: ~p"/users/log-in")
     end
   end
@@ -40,7 +40,7 @@ defmodule EscalimetroWeb.UserSessionController do
     else
       # In order to prevent user enumeration attacks, don't disclose whether the email is registered.
       conn
-      |> put_flash(:error, "Email ou senha invalidos")
+      |> put_flash(:error, "Invalid email or password")
       |> put_flash(:email, String.slice(email, 0, 160))
       |> redirect(to: ~p"/users/log-in")
     end
@@ -56,12 +56,12 @@ defmodule EscalimetroWeb.UserSessionController do
 
     conn
     |> put_session(:user_return_to, ~p"/users/settings")
-    |> create(params, "Senha atualizada com sucesso.")
+    |> create(params, "Password updated successfully!")
   end
 
   def delete(conn, _params) do
     conn
-    |> put_flash(:info, "Voce saiu da conta.")
+    |> put_flash(:info, "Logged out successfully.")
     |> UserAuth.log_out_user()
   end
 end

@@ -50,12 +50,10 @@ defmodule Escalimetro.Events do
     |> Event.changeset(attrs)
   end
 
-  def create_event(%Scope{user: %User{}} = scope, attrs) do
-    with :ok <- ensure_confirmed_scope(scope) do
-      %Event{owner_user_id: scope.user.id}
-      |> Event.changeset(attrs)
-      |> Repo.insert()
-    end
+  def create_event(%Scope{user: %User{id: user_id}}, attrs) do
+    %Event{owner_user_id: user_id}
+    |> Event.changeset(attrs)
+    |> Repo.insert()
   end
 
   def create_event(_scope, _attrs), do: {:error, :unauthorized}
@@ -69,50 +67,25 @@ defmodule Escalimetro.Events do
     end
   end
 
-  def close_event(%Scope{} = scope, %Event{} = event) do
+  def complete_event(%Scope{} = scope, %Event{} = event) do
     with :ok <- authorize_event_management(scope, event),
          :ok <- ensure_event_editable(event) do
       now = DateTime.utc_now(:second)
 
       Multi.new()
-      |> Multi.update(:event, Event.close_changeset(event, now))
+      |> Multi.update(:event, Event.complete_changeset(event, now))
       |> Multi.update_all(:ballots, open_ballots_query(event.id),
         set: [status: "closed", closed_at: now, updated_at: now]
       )
       |> Repo.transaction()
       |> case do
         {:ok, %{event: event}} ->
-          broadcast_event(event.id, :event_closed)
+          broadcast_event(event.id, :event_completed)
           {:ok, event}
 
         {:error, _operation, changeset, _changes} ->
           {:error, changeset}
       end
-    end
-  end
-
-  def complete_event(%Scope{} = scope, %Event{} = event), do: close_event(scope, event)
-
-  def reopen_event(%Scope{} = scope, %Event{} = event) do
-    with :ok <- authorize_event_management(scope, event),
-         {:status, "closed"} <- {:status, event.status} do
-      Multi.new()
-      |> Multi.update(:event, Event.reopen_changeset(event))
-      |> Multi.update_all(:ballots, closed_ballots_query(event.id),
-        set: [status: "open", closed_at: nil, updated_at: DateTime.utc_now(:second)]
-      )
-      |> Repo.transaction()
-      |> case do
-        {:ok, %{event: event}} ->
-          broadcast_event(event.id, :event_reopened)
-          {:ok, event}
-
-        {:error, _operation, changeset, _changes} ->
-          {:error, changeset}
-      end
-    else
-      {:status, "open"} -> {:error, :open_event}
-      error -> error
     end
   end
 
@@ -126,23 +99,19 @@ defmodule Escalimetro.Events do
     participant =
       EventParticipant
       |> where(participant_token: ^participant_token)
-      |> where(status: "active")
       |> preload([:user, :event])
       |> Repo.one!()
 
     event = participant.event
     ballots = list_public_ballots(event)
     votes = list_participant_votes(participant)
-    active_votes = Enum.filter(votes, &is_nil(&1.rejected_at))
 
     %{
       event: event,
       participant: participant,
       ballots: ballots,
       votes: votes,
-      votes_by_ballot: Enum.group_by(votes, & &1.ballot_id),
-      active_votes_by_ballot: Enum.group_by(active_votes, & &1.ballot_id),
-      results: build_ballot_results(ballots, list_result_votes(event))
+      votes_by_ballot: Map.new(votes, &{&1.ballot_id, &1})
     }
   end
 
@@ -283,7 +252,7 @@ defmodule Escalimetro.Events do
   end
 
   def change_ballot(%Scope{} = _scope, %Ballot{} = ballot, attrs \\ %{}) do
-    Ballot.changeset(ballot, normalize_ballot_attrs(attrs))
+    Ballot.changeset(ballot, attrs)
   end
 
   def create_ballot(%Scope{} = scope, %Event{} = event, attrs) do
@@ -312,7 +281,7 @@ defmodule Escalimetro.Events do
       ballot
       |> Ballot.changeset(ballot_attrs(attrs))
       |> validate_ballot_options(option_attrs, existing_options_count)
-      |> update_ballot_with_options(option_attrs, scope.user.id)
+      |> update_ballot_with_options(option_attrs)
       |> broadcast_result(event.id, :ballot_saved)
     end
   end
@@ -545,24 +514,25 @@ defmodule Escalimetro.Events do
 
   def get_event_results(%Scope{} = scope, %Event{} = event) do
     if can_manage_event?(scope, event) do
-      build_event_results(event)
+      ballot_results =
+        event
+        |> list_result_ballots()
+        |> build_ballot_results(list_result_votes(event))
+
+      %{
+        event: event,
+        ballot_results: ballot_results,
+        ballots_count: length(ballot_results),
+        active_votes_count: sum_result_count(ballot_results, :active_votes_count),
+        rejected_votes_count: sum_result_count(ballot_results, :rejected_votes_count)
+      }
+      |> put_event_results_summary()
     else
       empty_event_results(event)
     end
   end
 
   def get_event_results(_scope, %Event{} = event), do: empty_event_results(event)
-
-  def get_public_event_results(%Event{} = event), do: build_event_results(event)
-
-  def get_public_event_results_by_invite_token(token) when is_binary(token) do
-    case get_active_invite_by_token(token) do
-      %EventInvite{event: %Event{} = event} -> {:ok, get_public_event_results(event)}
-      nil -> {:error, :invalid_invite}
-    end
-  end
-
-  def get_public_event_results_by_invite_token(_token), do: {:error, :invalid_invite}
 
   def change_vote(%Scope{} = _scope, %Vote{} = vote, attrs \\ %{}) do
     Vote.changeset(vote, attrs)
@@ -575,15 +545,13 @@ defmodule Escalimetro.Events do
         %Ballot{} = ballot,
         attrs
       ) do
-    participant = Repo.get!(EventParticipant, participant.id)
-    ballot = Repo.preload(ballot, [:event, :options])
-
     with :ok <- ensure_vote_context(event, participant, ballot),
          :ok <- ensure_event_accepts_votes(event),
          :ok <- ensure_ballot_open(ballot),
-         :ok <- ensure_participant_active(participant),
-         {:ok, vote_attrs} <- normalize_vote_attrs(ballot, attrs) do
-      upsert_participant_vote(event, participant, ballot, vote_attrs)
+         :ok <- ensure_participant_active(participant) do
+      %Vote{event_id: event.id, ballot_id: ballot.id, participant_id: participant.id}
+      |> Vote.changeset(attrs)
+      |> Repo.insert()
     end
   end
 
@@ -599,21 +567,6 @@ defmodule Escalimetro.Events do
          {:ok, vote_attrs} <- normalize_vote_attrs(ballot, attrs) do
       upsert_participant_vote(event, participant, ballot, vote_attrs)
       |> broadcast_result(event.id, :vote_cast)
-    end
-  end
-
-  def remove_vote(%EventParticipant{} = participant, %Ballot{} = ballot, attrs \\ %{}) do
-    participant = Repo.get!(EventParticipant, participant.id)
-    event = participant_event!(participant)
-    ballot = Repo.preload(ballot, [:event, :options])
-
-    with :ok <- ensure_vote_context(event, participant, ballot),
-         :ok <- ensure_event_accepts_votes(event),
-         :ok <- ensure_ballot_open(ballot),
-         :ok <- ensure_participant_active(participant),
-         {:ok, vote_target} <- normalize_vote_removal_target(ballot, attrs) do
-      reject_participant_votes(event, participant, ballot, vote_target, "Voto removido")
-      |> broadcast_result(event.id, :vote_removed)
     end
   end
 
@@ -655,6 +608,7 @@ defmodule Escalimetro.Events do
     Vote
     |> where(participant_id: ^participant_id, event_id: ^event_id)
     |> order_by([v], desc: is_nil(v.rejected_at), desc: v.updated_at)
+    |> distinct([v], v.ballot_id)
     |> preload([:ballot_option])
     |> Repo.all()
   end
@@ -685,7 +639,14 @@ defmodule Escalimetro.Events do
 
     if changeset.valid? do
       display_name = Changeset.get_field(changeset, :display_name)
-      create_invite_guest_participant(event, display_name)
+
+      case get_guest_event_participant(event, display_name) do
+        %EventParticipant{} = participant ->
+          {:ok, participant}
+
+        nil ->
+          create_invite_guest_participant(event, display_name)
+      end
     else
       {:error, changeset}
     end
@@ -709,6 +670,14 @@ defmodule Escalimetro.Events do
       status: "active"
     })
     |> Repo.insert()
+  end
+
+  defp get_guest_event_participant(%Event{id: event_id}, display_name) do
+    EventParticipant
+    |> where(event_id: ^event_id, kind: "guest", display_name: ^display_name)
+    |> order_by([participant], asc: participant.inserted_at)
+    |> limit(1)
+    |> Repo.one()
   end
 
   defp create_invite_guest_participant(%Event{id: event_id}, display_name) do
@@ -735,61 +704,41 @@ defmodule Escalimetro.Events do
   defp normalize_guest_identification_attrs(attrs), do: attrs
 
   defp normalize_vote_attrs(%Ballot{kind: "multiple_choice"} = ballot, attrs) do
-    value = attrs |> fetch_param(:value, "value") |> value_or(nil)
-
     option_id =
       attrs
       |> fetch_param(:ballot_option_id, "ballot_option_id")
       |> value_or(nil)
       |> parse_optional_integer()
 
-    cond do
-      not is_nil(value) and value != "" ->
-        {:error, :invalid_vote_shape}
-
-      valid_ballot_option?(ballot, option_id) ->
-        {:ok,
-         %{
-           ballot_option_id: option_id,
-           value: nil,
-           selection_mode: ballot.selection_mode || "single_choice",
-           intensity: vote_intensity(attrs),
-           justification: vote_justification(attrs)
-         }}
-
-      true ->
-        {:error, :invalid_ballot_option}
+    if valid_ballot_option?(ballot, option_id) do
+      {:ok,
+       %{
+         ballot_option_id: option_id,
+         value: nil,
+         intensity: vote_intensity(attrs),
+         justification: vote_justification(attrs)
+       }}
+    else
+      {:error, :invalid_ballot_option}
     end
   end
 
   defp normalize_vote_attrs(%Ballot{kind: "yes_no_maybe"}, attrs) do
-    option_id =
-      attrs
-      |> fetch_param(:ballot_option_id, "ballot_option_id")
-      |> value_or(nil)
-      |> parse_optional_integer()
-
     value =
       attrs
       |> fetch_param(:value, "value")
       |> value_or(nil)
 
-    cond do
-      not is_nil(option_id) ->
-        {:error, :invalid_vote_shape}
-
-      value in Vote.values() ->
-        {:ok,
-         %{
-           ballot_option_id: nil,
-           value: value,
-           selection_mode: "single_choice",
-           intensity: false,
-           justification: vote_justification(attrs)
-         }}
-
-      true ->
-        {:error, :invalid_vote_value}
+    if value in Vote.values() do
+      {:ok,
+       %{
+         ballot_option_id: nil,
+         value: value,
+         intensity: false,
+         justification: vote_justification(attrs)
+       }}
+    else
+      {:error, :invalid_vote_value}
     end
   end
 
@@ -806,38 +755,6 @@ defmodule Escalimetro.Events do
     |> value_or(nil)
   end
 
-  defp normalize_vote_removal_target(%Ballot{kind: "multiple_choice"} = ballot, attrs) do
-    option_id =
-      attrs
-      |> fetch_param(:ballot_option_id, "ballot_option_id")
-      |> value_or(nil)
-      |> parse_optional_integer()
-
-    cond do
-      is_nil(option_id) ->
-        {:ok, :all}
-
-      valid_ballot_option?(ballot, option_id) ->
-        {:ok, {:ballot_option_id, option_id}}
-
-      true ->
-        {:error, :invalid_ballot_option}
-    end
-  end
-
-  defp normalize_vote_removal_target(%Ballot{kind: "yes_no_maybe"}, attrs) do
-    value =
-      attrs
-      |> fetch_param(:value, "value")
-      |> value_or(nil)
-
-    cond do
-      is_nil(value) or value == "" -> {:ok, :all}
-      value in Vote.values() -> {:ok, {:value, value}}
-      true -> {:error, :invalid_vote_value}
-    end
-  end
-
   defp valid_ballot_option?(%Ballot{id: ballot_id}, option_id) when is_integer(option_id) do
     Repo.exists?(
       from option in BallotOption,
@@ -849,108 +766,50 @@ defmodule Escalimetro.Events do
 
   defp valid_ballot_option?(_ballot, _option_id), do: false
 
-  defp upsert_participant_vote(
-         event,
-         participant,
-         %Ballot{kind: "multiple_choice", selection_mode: "multi_choice"} = ballot,
-         vote_attrs
-       ) do
+  defp upsert_participant_vote(event, participant, ballot, vote_attrs) do
     Repo.transaction(fn ->
-      vote =
+      active_votes =
         Vote
         |> where(
           event_id: ^event.id,
           ballot_id: ^ballot.id,
-          participant_id: ^participant.id,
-          ballot_option_id: ^vote_attrs.ballot_option_id
+          participant_id: ^participant.id
         )
         |> where([v], is_nil(v.rejected_at))
-        |> Repo.one()
+        |> order_by([v], asc: v.inserted_at)
+        |> Repo.all()
 
-      insert_or_update_vote(vote, event, participant, ballot, vote_attrs)
+      [vote | stale_votes] = active_votes ++ [nil]
+      reject_stale_votes(stale_votes)
+
+      result =
+        case vote do
+          nil ->
+            %Vote{event_id: event.id, ballot_id: ballot.id, participant_id: participant.id}
+            |> Vote.changeset(vote_attrs)
+            |> Repo.insert()
+
+          %Vote{} = vote ->
+            vote
+            |> Vote.changeset(vote_attrs)
+            |> Repo.update()
+        end
+
+      case result do
+        {:ok, vote} -> vote
+        {:error, changeset} -> Repo.rollback(changeset)
+      end
     end)
   end
 
-  defp upsert_participant_vote(event, participant, ballot, vote_attrs) do
-    Repo.transaction(fn ->
-      active_votes =
-        list_active_participant_ballot_votes(event, participant, ballot)
-
-      matching_vote = Enum.find(active_votes, &same_vote_target?(&1, vote_attrs))
-      stale_votes = Enum.reject(active_votes, &(&1.id == (matching_vote && matching_vote.id)))
-      reject_votes!(stale_votes, "Voto substituido", nil)
-
-      insert_or_update_vote(matching_vote, event, participant, ballot, vote_attrs)
-    end)
-  end
-
-  defp insert_or_update_vote(nil, event, participant, ballot, vote_attrs) do
-    %Vote{event_id: event.id, ballot_id: ballot.id, participant_id: participant.id}
-    |> Vote.changeset(vote_attrs)
-    |> Repo.insert()
-    |> unwrap_transaction_result()
-  end
-
-  defp insert_or_update_vote(%Vote{} = vote, _event, _participant, _ballot, vote_attrs) do
-    vote
-    |> Vote.changeset(vote_attrs)
-    |> Repo.update()
-    |> unwrap_transaction_result()
-  end
-
-  defp unwrap_transaction_result({:ok, vote}), do: vote
-  defp unwrap_transaction_result({:error, changeset}), do: Repo.rollback(changeset)
-
-  defp same_vote_target?(%Vote{ballot_option_id: option_id}, %{ballot_option_id: option_id})
-       when not is_nil(option_id),
-       do: true
-
-  defp same_vote_target?(%Vote{value: value}, %{value: value}) when not is_nil(value), do: true
-  defp same_vote_target?(_vote, _vote_attrs), do: false
-
-  defp reject_participant_votes(event, participant, ballot, vote_target, reason) do
-    Repo.transaction(fn ->
-      event
-      |> list_active_participant_ballot_votes(participant, ballot)
-      |> filter_votes_by_target(vote_target)
-      |> reject_votes!(reason, nil)
-    end)
-  end
-
-  defp list_active_participant_ballot_votes(event, participant, ballot) do
-    Vote
-    |> where(
-      event_id: ^event.id,
-      ballot_id: ^ballot.id,
-      participant_id: ^participant.id
-    )
-    |> where([v], is_nil(v.rejected_at))
-    |> order_by([v], asc: v.inserted_at)
-    |> Repo.all()
-  end
-
-  defp filter_votes_by_target(votes, :all), do: votes
-
-  defp filter_votes_by_target(votes, {:ballot_option_id, option_id}) do
-    Enum.filter(votes, &(&1.ballot_option_id == option_id))
-  end
-
-  defp filter_votes_by_target(votes, {:value, value}) do
-    Enum.filter(votes, &(&1.value == value))
-  end
-
-  defp reject_votes!(votes, reason, rejected_by_user_id) do
+  defp reject_stale_votes(votes) do
     now = DateTime.utc_now(:second)
 
     votes
     |> Enum.reject(&is_nil/1)
-    |> Enum.map(fn vote ->
+    |> Enum.each(fn vote ->
       vote
-      |> Changeset.change(
-        rejected_at: now,
-        rejected_by_user_id: rejected_by_user_id,
-        rejection_reason: reason
-      )
+      |> Changeset.change(rejected_at: now, rejection_reason: "Voto substituido")
       |> Repo.update!()
     end)
   end
@@ -1027,16 +886,12 @@ defmodule Escalimetro.Events do
       ballot.options
       |> Enum.map(&multiple_choice_option_result(&1, votes, active_votes_count))
       |> sort_option_results()
-
-    outcome = result_outcome(option_results, active_votes_count)
+      |> mark_winner(active_votes_count)
 
     %{
       ballot: ballot,
-      option_results: outcome.option_results,
-      winner: outcome.winner,
-      tied_options: outcome.tied_options,
-      tie?: outcome.tie?,
-      resolved_by_intensity?: outcome.resolved_by_intensity?,
+      option_results: option_results,
+      winner: Enum.find(option_results, & &1.winner),
       active_votes_count: active_votes_count,
       rejected_votes_count: length(votes) - active_votes_count,
       rejected_vote_results: rejected_vote_results(votes)
@@ -1053,16 +908,12 @@ defmodule Escalimetro.Events do
         yes_no_maybe_option_result(value, label, position, votes, active_votes_count)
       end)
       |> sort_option_results()
-
-    outcome = result_outcome(option_results, active_votes_count)
+      |> mark_winner(active_votes_count)
 
     %{
       ballot: ballot,
-      option_results: outcome.option_results,
-      winner: outcome.winner,
-      tied_options: outcome.tied_options,
-      tie?: outcome.tie?,
-      resolved_by_intensity?: outcome.resolved_by_intensity?,
+      option_results: option_results,
+      winner: Enum.find(option_results, & &1.winner),
       active_votes_count: active_votes_count,
       rejected_votes_count: length(votes) - active_votes_count,
       rejected_vote_results: rejected_vote_results(votes)
@@ -1084,8 +935,6 @@ defmodule Escalimetro.Events do
       percent: vote_percent(votes_count, active_votes_count),
       suggested: not is_nil(option.suggested_by_participant_id),
       rejected: not is_nil(option.rejected_at),
-      voter_results: voter_results(active_votes),
-      tied: false,
       winner: false
     }
   end
@@ -1105,8 +954,6 @@ defmodule Escalimetro.Events do
       percent: vote_percent(votes_count, active_votes_count),
       suggested: false,
       rejected: false,
-      voter_results: voter_results(active_votes),
-      tied: false,
       winner: false
     }
   end
@@ -1118,87 +965,13 @@ defmodule Escalimetro.Events do
     end)
   end
 
-  defp result_outcome(option_results, 0) do
-    %{
-      option_results: option_results,
-      winner: nil,
-      tied_options: [],
-      tie?: false,
-      resolved_by_intensity?: false
-    }
+  defp mark_winner(option_results, 0), do: option_results
+
+  defp mark_winner([winner | rest], _active_votes_count) do
+    [%{winner | winner: true} | rest]
   end
 
-  defp result_outcome([], _active_votes_count) do
-    %{
-      option_results: [],
-      winner: nil,
-      tied_options: [],
-      tie?: false,
-      resolved_by_intensity?: false
-    }
-  end
-
-  defp result_outcome([top_option | _rest] = option_results, _active_votes_count) do
-    tied_options =
-      Enum.filter(
-        option_results,
-        &(&1.votes_count == top_option.votes_count and
-            &1.intensity_count == top_option.intensity_count)
-      )
-
-    same_vote_count_options =
-      Enum.filter(option_results, &(&1.votes_count == top_option.votes_count))
-
-    if length(tied_options) > 1 do
-      tied_keys =
-        tied_options
-        |> Enum.map(& &1.key)
-        |> MapSet.new()
-
-      %{
-        option_results: mark_tied_options(option_results, tied_keys),
-        winner: nil,
-        tied_options: tied_options,
-        tie?: true,
-        resolved_by_intensity?: false
-      }
-    else
-      winner = %{top_option | winner: true}
-
-      %{
-        option_results: mark_winner_option(option_results, winner.key),
-        winner: winner,
-        tied_options: [],
-        tie?: false,
-        resolved_by_intensity?:
-          length(same_vote_count_options) > 1 and top_option.intensity_count > 0
-      }
-    end
-  end
-
-  defp mark_tied_options(option_results, tied_keys) do
-    Enum.map(option_results, &%{&1 | tied: MapSet.member?(tied_keys, &1.key)})
-  end
-
-  defp mark_winner_option(option_results, winner_key) do
-    Enum.map(option_results, &%{&1 | winner: &1.key == winner_key})
-  end
-
-  defp voter_results(votes) do
-    votes
-    |> Enum.sort_by(fn vote ->
-      {if(vote.intensity, do: 0, else: 1),
-       normalize_label(result_participant_name(vote.participant))}
-    end)
-    |> Enum.map(fn vote ->
-      %{
-        id: vote.id,
-        participant_name: result_participant_name(vote.participant),
-        intensity: vote.intensity,
-        justification: vote.justification
-      }
-    end)
-  end
+  defp mark_winner([], _active_votes_count), do: []
 
   defp rejected_vote_results(votes) do
     votes
@@ -1262,22 +1035,6 @@ defmodule Escalimetro.Events do
     |> Enum.sum()
   end
 
-  defp build_event_results(%Event{} = event) do
-    ballot_results =
-      event
-      |> list_result_ballots()
-      |> build_ballot_results(list_result_votes(event))
-
-    %{
-      event: event,
-      ballot_results: ballot_results,
-      ballots_count: length(ballot_results),
-      active_votes_count: sum_result_count(ballot_results, :active_votes_count),
-      rejected_votes_count: sum_result_count(ballot_results, :rejected_votes_count)
-    }
-    |> put_event_results_summary()
-  end
-
   defp empty_event_results(event) do
     %{
       event: event,
@@ -1315,14 +1072,7 @@ defmodule Escalimetro.Events do
   end
 
   defp ballot_result_summary_line(%{ballot: ballot, winner: nil} = result) do
-    if result.tie? do
-      labels = result.tied_options |> Enum.map(& &1.label) |> Enum.join(", ")
-      votes_count = result.tied_options |> List.first() |> Map.fetch!(:votes_count)
-
-      "- #{ballot.title}: empate entre #{labels} (#{votes_count} voto(s))#{summary_rejected_suffix(result)}"
-    else
-      "- #{ballot.title}: sem votos ativos#{summary_rejected_suffix(result)}"
-    end
+    "- #{ballot.title}: sem votos ativos#{summary_rejected_suffix(result)}"
   end
 
   defp ballot_result_summary_line(%{ballot: ballot, winner: winner} = result) do
@@ -1330,14 +1080,7 @@ defmodule Escalimetro.Events do
       ["#{winner.votes_count} voto(s)"]
       |> maybe_append_intensity_detail(winner.intensity_count)
 
-    suffix =
-      if result.resolved_by_intensity? do
-        " - desempate por intensidade"
-      else
-        ""
-      end
-
-    "- #{ballot.title}: #{winner.label} (#{Enum.join(details, ", ")})#{suffix}#{summary_rejected_suffix(result)}"
+    "- #{ballot.title}: #{winner.label} (#{Enum.join(details, ", ")})#{summary_rejected_suffix(result)}"
   end
 
   defp maybe_append_intensity_detail(details, 0), do: details
@@ -1367,29 +1110,23 @@ defmodule Escalimetro.Events do
   defp put_event_owner(_scope, event), do: event
 
   defp authorize_event_management(%Scope{} = scope, %Event{} = event) do
-    with :ok <- ensure_confirmed_scope(scope) do
-      if can_manage_event?(scope, event) do
-        :ok
-      else
-        {:error, :unauthorized}
-      end
+    if can_manage_event?(scope, event) do
+      :ok
+    else
+      {:error, :unauthorized}
     end
   end
 
-  defp ensure_confirmed_scope(%Scope{user: %User{confirmed_at: %DateTime{}}}), do: :ok
-  defp ensure_confirmed_scope(%Scope{user: %User{}}), do: {:error, :unconfirmed_user}
-  defp ensure_confirmed_scope(_scope), do: {:error, :unauthorized}
-
-  defp ensure_event_editable(%Event{status: "closed"}), do: {:error, :closed_event}
+  defp ensure_event_editable(%Event{status: "completed"}), do: {:error, :completed_event}
   defp ensure_event_editable(%Event{}), do: :ok
 
-  defp ensure_event_accepts_votes(%Event{status: "closed"}), do: {:error, :closed_event}
+  defp ensure_event_accepts_votes(%Event{status: "completed"}), do: {:error, :completed_event}
   defp ensure_event_accepts_votes(%Event{}), do: :ok
 
   defp ensure_ballot_open(%Ballot{status: "open"}), do: :ok
   defp ensure_ballot_open(%Ballot{}), do: {:error, :closed_ballot}
 
-  defp ensure_ballot_allows_suggestions(%Ballot{allow_suggestion: true}), do: :ok
+  defp ensure_ballot_allows_suggestions(%Ballot{allow_sugestion: true}), do: :ok
   defp ensure_ballot_allows_suggestions(%Ballot{}), do: {:error, :suggestions_disabled}
 
   defp ensure_participant_active(%EventParticipant{status: "active"}), do: :ok
@@ -1408,11 +1145,6 @@ defmodule Escalimetro.Events do
       where: ballot.event_id == ^event_id and ballot.status == "open"
   end
 
-  defp closed_ballots_query(event_id) do
-    from ballot in Ballot,
-      where: ballot.event_id == ^event_id and ballot.status == "closed"
-  end
-
   defp active_event_invites_query(event_id) do
     from invite in EventInvite,
       where:
@@ -1423,16 +1155,6 @@ defmodule Escalimetro.Events do
   defp active_participant_votes_query(participant_id) do
     from vote in Vote,
       where: vote.participant_id == ^participant_id and is_nil(vote.rejected_at)
-  end
-
-  defp active_ballot_votes_query(ballot_id) do
-    from vote in Vote,
-      where: vote.ballot_id == ^ballot_id and is_nil(vote.rejected_at)
-  end
-
-  defp active_ballot_option_votes_query(ballot_id) do
-    from vote in active_ballot_votes_query(ballot_id),
-      where: not is_nil(vote.ballot_option_id)
   end
 
   defp ordered_ballot_options_query do
@@ -1452,17 +1174,10 @@ defmodule Escalimetro.Events do
       where: vote.ballot_option_id == ^option_id and is_nil(vote.rejected_at)
   end
 
-  defp active_options_votes_query(option_ids) do
-    from vote in Vote,
-      where: vote.ballot_option_id in ^option_ids and is_nil(vote.rejected_at)
-  end
-
   defp normalize_ballot_attrs(%{} = attrs) do
     attrs
     |> normalize_ballot_status()
     |> normalize_ballot_position()
-    |> normalize_ballot_selection_mode()
-    |> normalize_ballot_kind_configuration()
   end
 
   defp normalize_ballot_attrs(attrs), do: attrs
@@ -1478,25 +1193,6 @@ defmodule Escalimetro.Events do
     case fetch_param(attrs, :position, "position") do
       {:ok, ""} -> delete_param(attrs, :position, "position")
       _ -> attrs
-    end
-  end
-
-  defp normalize_ballot_selection_mode(attrs) do
-    case fetch_param(attrs, :selection_mode, "selection_mode") do
-      {:ok, ""} -> delete_param(attrs, :selection_mode, "selection_mode")
-      _ -> attrs
-    end
-  end
-
-  defp normalize_ballot_kind_configuration(attrs) do
-    case fetch_param(attrs, :kind, "kind") do
-      {:ok, "yes_no_maybe"} ->
-        attrs
-        |> put_param(:selection_mode, "selection_mode", "single_choice")
-        |> put_param(:allow_suggestion, "allow_suggestion", false)
-
-      _other ->
-        attrs
     end
   end
 
@@ -1535,7 +1231,7 @@ defmodule Escalimetro.Events do
     Multi.new()
     |> Multi.insert(:ballot, changeset)
     |> Multi.run(:options, fn repo, %{ballot: ballot} ->
-      sync_ballot_options(repo, ballot, option_attrs, nil)
+      sync_ballot_options(repo, ballot, option_attrs)
     end)
     |> Repo.transaction()
     |> case do
@@ -1547,18 +1243,15 @@ defmodule Escalimetro.Events do
     end
   end
 
-  defp update_ballot_with_options(%Changeset{valid?: false} = changeset, _option_attrs, _user_id) do
+  defp update_ballot_with_options(%Changeset{valid?: false} = changeset, _option_attrs) do
     {:error, changeset}
   end
 
-  defp update_ballot_with_options(%Changeset{} = changeset, option_attrs, user_id) do
+  defp update_ballot_with_options(%Changeset{} = changeset, option_attrs) do
     Multi.new()
     |> Multi.update(:ballot, changeset)
     |> Multi.run(:options, fn repo, %{ballot: ballot} ->
-      sync_ballot_options(repo, ballot, option_attrs, user_id)
-    end)
-    |> Multi.run(:votes, fn repo, %{ballot: ballot} ->
-      sync_active_vote_selection_modes(repo, ballot, user_id)
+      sync_ballot_options(repo, ballot, option_attrs)
     end)
     |> Repo.transaction()
     |> case do
@@ -1570,16 +1263,15 @@ defmodule Escalimetro.Events do
     end
   end
 
-  defp sync_ballot_options(repo, %Ballot{kind: "yes_no_maybe"} = ballot, option_attrs, user_id) do
+  defp sync_ballot_options(repo, %Ballot{kind: "yes_no_maybe"} = ballot, option_attrs) do
     if option_attrs != :not_provided do
-      query = from option in BallotOption, where: option.ballot_id == ^ballot.id
-      reject_omitted_options(repo, query, user_id)
+      repo.delete_all(from option in BallotOption, where: option.ballot_id == ^ballot.id)
     end
 
     {:ok, []}
   end
 
-  defp sync_ballot_options(repo, %Ballot{} = ballot, :not_provided, _user_id) do
+  defp sync_ballot_options(repo, %Ballot{} = ballot, :not_provided) do
     {:ok,
      repo.all(
        from option in ordered_ballot_options_query(),
@@ -1587,7 +1279,7 @@ defmodule Escalimetro.Events do
      )}
   end
 
-  defp sync_ballot_options(repo, %Ballot{} = ballot, option_attrs, user_id) do
+  defp sync_ballot_options(repo, %Ballot{} = ballot, option_attrs) do
     existing_options =
       repo.all(from option in BallotOption, where: option.ballot_id == ^ballot.id)
       |> Map.new(&{&1.id, &1})
@@ -1619,93 +1311,9 @@ defmodule Escalimetro.Events do
           option.ballot_id == ^ballot.id and is_nil(option.suggested_by_participant_id) and
             option.id not in ^saved_ids
 
-    reject_omitted_options(repo, omitted_options_query, user_id)
+    repo.delete_all(omitted_options_query)
 
     {:ok, saved_options}
-  end
-
-  defp sync_active_vote_selection_modes(repo, %Ballot{kind: "yes_no_maybe"} = ballot, _user_id) do
-    repo.update_all(active_ballot_votes_query(ballot.id),
-      set: [selection_mode: "single_choice", updated_at: DateTime.utc_now(:second)]
-    )
-
-    {:ok, []}
-  end
-
-  defp sync_active_vote_selection_modes(
-         repo,
-         %Ballot{kind: "multiple_choice", selection_mode: "multi_choice"} = ballot,
-         _user_id
-       ) do
-    repo.update_all(active_ballot_option_votes_query(ballot.id),
-      set: [selection_mode: "multi_choice", updated_at: DateTime.utc_now(:second)]
-    )
-
-    {:ok, []}
-  end
-
-  defp sync_active_vote_selection_modes(repo, %Ballot{} = ballot, user_id) do
-    active_votes =
-      repo.all(
-        from vote in active_ballot_option_votes_query(ballot.id),
-          order_by: [desc: vote.updated_at, desc: vote.inserted_at]
-      )
-
-    active_votes
-    |> Enum.group_by(& &1.participant_id)
-    |> Enum.each(fn {_participant_id, votes} ->
-      [kept_vote | rejected_votes] = votes
-
-      kept_vote
-      |> Changeset.change(selection_mode: "single_choice")
-      |> repo.update!()
-
-      reject_votes_with_repo!(repo, rejected_votes, "Modo de selecao alterado", user_id)
-    end)
-
-    {:ok, []}
-  end
-
-  defp reject_omitted_options(repo, query, user_id) do
-    now = DateTime.utc_now(:second)
-
-    options =
-      query
-      |> where([option], is_nil(option.rejected_at))
-      |> repo.all()
-
-    Enum.each(options, fn option ->
-      option
-      |> BallotOption.reject_changeset(now)
-      |> repo.update!()
-    end)
-
-    option_ids = Enum.map(options, & &1.id)
-
-    if option_ids != [] do
-      repo.update_all(active_options_votes_query(option_ids),
-        set: [
-          rejected_at: now,
-          rejected_by_user_id: user_id,
-          rejection_reason: "Opcao removida",
-          updated_at: now
-        ]
-      )
-    end
-  end
-
-  defp reject_votes_with_repo!(repo, votes, reason, rejected_by_user_id) do
-    now = DateTime.utc_now(:second)
-
-    Enum.each(votes, fn vote ->
-      vote
-      |> Changeset.change(
-        rejected_at: now,
-        rejected_by_user_id: rejected_by_user_id,
-        rejection_reason: reason
-      )
-      |> repo.update!()
-    end)
   end
 
   defp normalize_option_attrs(options) when is_map(options) do
@@ -1826,7 +1434,7 @@ defmodule Escalimetro.Events do
   defp event_topic(event_id), do: Topics.event(event_id)
 
   defp broadcast_result({:ok, %{id: event_id} = result}, _event_id, event_name)
-       when event_name in [:event_closed, :event_reopened] do
+       when event_name in [:event_completed] do
     broadcast_event(event_id, event_name)
     {:ok, result}
   end

@@ -10,16 +10,16 @@ defmodule EscalimetroWeb.UserLive.Login do
       <div class="mx-auto max-w-sm space-y-4">
         <div class="text-center">
           <.header>
-            <p>Entrar</p>
+            <p>Log in</p>
             <:subtitle>
-              <%= if logged_in?(@current_scope) do %>
-                Confirme sua identidade para executar acoes sensiveis na sua conta.
+              <%= if @current_scope do %>
+                You need to reauthenticate to perform sensitive actions on your account.
               <% else %>
-                Ainda nao tem conta? <.link
+                Don't have an account? <.link
                   navigate={~p"/users/register"}
                   class="font-semibold text-brand hover:underline"
                   phx-no-format
-                >Crie uma conta</.link> agora.
+                >Sign up</.link> for an account now.
               <% end %>
             </:subtitle>
           </.header>
@@ -28,23 +28,23 @@ defmodule EscalimetroWeb.UserLive.Login do
         <div :if={local_mail_adapter?()} class="alert alert-info">
           <.icon name="hero-information-circle" class="size-6 shrink-0" />
           <div>
-            <p>O adaptador local de email esta ativo.</p>
+            <p>You are running the local mail adapter.</p>
             <p>
-              Para ver emails enviados, acesse <.link href="/dev/mailbox" class="underline">a caixa local</.link>.
+              To see sent emails, visit <.link href="/dev/mailbox" class="underline">the mailbox page</.link>.
             </p>
           </div>
         </div>
 
         <.form
+          :let={f}
           for={@form}
           id="login_form_magic"
           action={~p"/users/log-in"}
           phx-submit="submit_magic"
         >
           <.input
-            id="login_form_magic_email"
-            readonly={logged_in?(@current_scope)}
-            field={@form[:email]}
+            readonly={!!@current_scope}
+            field={f[:email]}
             type="email"
             label="Email"
             autocomplete="username"
@@ -53,13 +53,14 @@ defmodule EscalimetroWeb.UserLive.Login do
             phx-mounted={JS.focus()}
           />
           <.button class="btn btn-primary w-full">
-            Entrar com email <span aria-hidden="true">→</span>
+            Log in with email <span aria-hidden="true">→</span>
           </.button>
         </.form>
 
-        <div class="divider">ou</div>
+        <div class="divider">or</div>
 
         <.form
+          :let={f}
           for={@form}
           id="login_form_password"
           action={~p"/users/log-in"}
@@ -67,9 +68,8 @@ defmodule EscalimetroWeb.UserLive.Login do
           phx-trigger-action={@trigger_submit}
         >
           <.input
-            id="login_form_password_email"
-            readonly={logged_in?(@current_scope)}
-            field={@form[:email]}
+            readonly={!!@current_scope}
+            field={f[:email]}
             type="email"
             label="Email"
             autocomplete="username"
@@ -77,18 +77,17 @@ defmodule EscalimetroWeb.UserLive.Login do
             required
           />
           <.input
-            id="login_form_password_password"
             field={@form[:password]}
             type="password"
-            label="Senha"
+            label="Password"
             autocomplete="current-password"
             spellcheck="false"
           />
           <.button class="btn btn-primary w-full" name={@form[:remember_me].name} value="true">
-            Entrar e manter conectado <span aria-hidden="true">→</span>
+            Log in and stay logged in <span aria-hidden="true">→</span>
           </.button>
           <.button class="btn btn-primary btn-soft w-full mt-2">
-            Entrar apenas desta vez
+            Log in only this time
           </.button>
         </.form>
       </div>
@@ -121,7 +120,7 @@ defmodule EscalimetroWeb.UserLive.Login do
     end
 
     info =
-      "Se o email estiver cadastrado, voce recebera instrucoes de acesso em instantes."
+      "If your email is in our system, you will receive instructions for logging in shortly."
 
     {:noreply,
      socket
@@ -132,7 +131,4 @@ defmodule EscalimetroWeb.UserLive.Login do
   defp local_mail_adapter? do
     Application.get_env(:escalimetro, Escalimetro.Mailer)[:adapter] == Swoosh.Adapters.Local
   end
-
-  defp logged_in?(%{user: user}), do: not is_nil(user)
-  defp logged_in?(_scope), do: false
 end

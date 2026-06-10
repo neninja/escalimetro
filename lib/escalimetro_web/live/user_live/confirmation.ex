@@ -9,7 +9,7 @@ defmodule EscalimetroWeb.UserLive.Confirmation do
     <Layouts.app flash={@flash} current_scope={@current_scope}>
       <div class="mx-auto max-w-sm">
         <div class="text-center">
-          <.header>Bem-vindo, {@user.email}</.header>
+          <.header>Welcome {@user.email}</.header>
         </div>
 
         <.form
@@ -25,13 +25,13 @@ defmodule EscalimetroWeb.UserLive.Confirmation do
           <.button
             name={@form[:remember_me].name}
             value="true"
-            phx-disable-with="Confirmando..."
+            phx-disable-with="Confirming..."
             class="btn btn-primary w-full"
           >
-            Confirmar e manter conectado
+            Confirm and stay logged in
           </.button>
-          <.button phx-disable-with="Confirmando..." class="btn btn-primary btn-soft w-full mt-2">
-            Confirmar apenas desta vez
+          <.button phx-disable-with="Confirming..." class="btn btn-primary btn-soft w-full mt-2">
+            Confirm and log in only this time
           </.button>
         </.form>
 
@@ -45,27 +45,27 @@ defmodule EscalimetroWeb.UserLive.Confirmation do
           phx-trigger-action={@trigger_submit}
         >
           <input type="hidden" name={@form[:token].name} value={@form[:token].value} />
-          <%= if logged_in?(@current_scope) do %>
-            <.button phx-disable-with="Entrando..." class="btn btn-primary w-full">
-              Entrar
+          <%= if @current_scope do %>
+            <.button phx-disable-with="Logging in..." class="btn btn-primary w-full">
+              Log in
             </.button>
           <% else %>
             <.button
               name={@form[:remember_me].name}
               value="true"
-              phx-disable-with="Entrando..."
+              phx-disable-with="Logging in..."
               class="btn btn-primary w-full"
             >
-              Manter conectado neste dispositivo
+              Keep me logged in on this device
             </.button>
-            <.button phx-disable-with="Entrando..." class="btn btn-primary btn-soft w-full mt-2">
-              Entrar apenas desta vez
+            <.button phx-disable-with="Logging in..." class="btn btn-primary btn-soft w-full mt-2">
+              Log me in only this time
             </.button>
           <% end %>
         </.form>
 
         <p :if={!@user.confirmed_at} class="alert alert-outline mt-8">
-          Dica: se preferir senha, voce pode habilitar nas configuracoes da conta.
+          Tip: If you prefer passwords, you can enable them in the user settings.
         </p>
       </div>
     </Layouts.app>
@@ -82,7 +82,7 @@ defmodule EscalimetroWeb.UserLive.Confirmation do
     else
       {:ok,
        socket
-       |> put_flash(:error, "O link de acesso e invalido ou expirou.")
+       |> put_flash(:error, "Magic link is invalid or it has expired.")
        |> push_navigate(to: ~p"/users/log-in")}
     end
   end
@@ -91,7 +91,4 @@ defmodule EscalimetroWeb.UserLive.Confirmation do
   def handle_event("submit", %{"user" => params}, socket) do
     {:noreply, assign(socket, form: to_form(params, as: "user"), trigger_submit: true)}
   end
-
-  defp logged_in?(%{user: user}), do: not is_nil(user)
-  defp logged_in?(_scope), do: false
 end

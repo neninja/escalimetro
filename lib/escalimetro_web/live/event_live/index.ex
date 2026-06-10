@@ -19,7 +19,7 @@ defmodule EscalimetroWeb.EventLive.Index do
               Eventos administrados
             </h1>
             <p class="max-w-2xl text-sm leading-6 text-base-content/70">
-              Crie, acompanhe e feche eventos com pautas e votacoes associadas.
+              Crie, acompanhe e conclua eventos com pautas e votacoes associadas.
             </p>
           </div>
 
@@ -52,7 +52,27 @@ defmodule EscalimetroWeb.EventLive.Index do
           </.button>
         </div>
 
-        <div :if={@total_events > 0} class="grid gap-6 lg:grid-cols-2">
+        <div :if={@total_events > 0} class="grid gap-6 lg:grid-cols-3">
+          <section class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
+                Rascunhos
+              </h2>
+              <span class="rounded-full bg-base-200 px-2.5 py-1 text-xs font-semibold">
+                {@draft_count}
+              </span>
+            </div>
+            <div id="draft-events" phx-update="stream" class="space-y-3">
+              <p
+                id="draft-events-empty"
+                class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-4 text-sm text-base-content/55"
+              >
+                Sem rascunhos.
+              </p>
+              <.event_card :for={{id, event} <- @streams.draft_events} id={id} event={event} />
+            </div>
+          </section>
+
           <section class="space-y-3">
             <div class="flex items-center justify-between">
               <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
@@ -76,20 +96,20 @@ defmodule EscalimetroWeb.EventLive.Index do
           <section class="space-y-3">
             <div class="flex items-center justify-between">
               <h2 class="text-sm font-semibold uppercase tracking-wide text-base-content/60">
-                Fechados
+                Concluidos
               </h2>
               <span class="rounded-full bg-base-200 px-2.5 py-1 text-xs font-semibold">
-                {@closed_count}
+                {@completed_count}
               </span>
             </div>
-            <div id="closed-events" phx-update="stream" class="space-y-3">
+            <div id="completed-events" phx-update="stream" class="space-y-3">
               <p
-                id="closed-events-empty"
+                id="completed-events-empty"
                 class="hidden only:block rounded-lg border border-dashed border-base-content/15 p-4 text-sm text-base-content/55"
               >
-                Sem eventos fechados.
+                Sem eventos concluidos.
               </p>
-              <.event_card :for={{id, event} <- @streams.closed_events} id={id} event={event} />
+              <.event_card :for={{id, event} <- @streams.completed_events} id={id} event={event} />
             </div>
           </section>
         </div>
@@ -138,7 +158,7 @@ defmodule EscalimetroWeb.EventLive.Index do
             Ver
           </.link>
           <.link
-            :if={@event.status != "closed"}
+            :if={@event.status != "completed"}
             navigate={~p"/events/#{@event}/edit"}
             class="font-semibold text-primary hover:underline"
           >
@@ -158,15 +178,18 @@ defmodule EscalimetroWeb.EventLive.Index do
   end
 
   defp assign_event_groups(socket, events) do
+    drafts = Enum.filter(events, &(&1.status == "draft"))
     open = Enum.filter(events, &(&1.status == "open"))
-    closed = Enum.filter(events, &(&1.status == "closed"))
+    completed = Enum.filter(events, &(&1.status == "completed"))
 
     socket
     |> assign(:total_events, length(events))
+    |> assign(:draft_count, length(drafts))
     |> assign(:open_count, length(open))
-    |> assign(:closed_count, length(closed))
+    |> assign(:completed_count, length(completed))
+    |> stream(:draft_events, drafts, reset: true)
     |> stream(:open_events, open, reset: true)
-    |> stream(:closed_events, closed, reset: true)
+    |> stream(:completed_events, completed, reset: true)
   end
 
   defp scheduled_label(%{scheduled_at: nil}), do: "Sem data"
@@ -175,9 +198,11 @@ defmodule EscalimetroWeb.EventLive.Index do
     Calendar.strftime(scheduled_at, "%d/%m/%Y %H:%M")
   end
 
+  defp status_label("draft"), do: "Rascunho"
   defp status_label("open"), do: "Aberto"
-  defp status_label("closed"), do: "Fechado"
+  defp status_label("completed"), do: "Concluido"
 
+  defp status_badge_class("draft"), do: "bg-amber-100 text-amber-800"
   defp status_badge_class("open"), do: "bg-emerald-100 text-emerald-800"
-  defp status_badge_class("closed"), do: "bg-slate-200 text-slate-700"
+  defp status_badge_class("completed"), do: "bg-slate-200 text-slate-700"
 end

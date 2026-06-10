@@ -12,8 +12,8 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
         |> log_in_user(user_fixture())
         |> live(~p"/users/settings")
 
-      assert html =~ "Alterar email"
-      assert html =~ "Salvar senha"
+      assert html =~ "Change Email"
+      assert html =~ "Save Password"
     end
 
     test "redirects if user is not logged in", %{conn: conn} do
@@ -21,7 +21,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
 
       assert {:redirect, %{to: path, flash: flash}} = redirect
       assert path == ~p"/users/log-in"
-      assert %{"error" => "Voce precisa entrar para acessar esta pagina."} = flash
+      assert %{"error" => "You must log in to access this page."} = flash
     end
 
     test "redirects if user is not in sudo mode", %{conn: conn} do
@@ -33,7 +33,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
         |> live(~p"/users/settings")
         |> follow_redirect(conn, ~p"/users/log-in")
 
-      assert conn.resp_body =~ "Confirme sua identidade para acessar esta pagina."
+      assert conn.resp_body =~ "You must re-authenticate to access this page."
     end
   end
 
@@ -55,7 +55,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
         })
         |> render_submit()
 
-      assert result =~ "Enviamos um link para confirmar a alteracao"
+      assert result =~ "A link to confirm your email"
       assert Accounts.get_user_by_email(user.email)
     end
 
@@ -70,7 +70,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
           "user" => %{"email" => "with spaces"}
         })
 
-      assert result =~ "Alterar email"
+      assert result =~ "Change Email"
       assert result =~ "must have the @ sign and no spaces"
     end
 
@@ -84,7 +84,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
         })
         |> render_submit()
 
-      assert result =~ "Alterar email"
+      assert result =~ "Change Email"
       assert result =~ "did not change"
     end
   end
@@ -118,7 +118,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
       assert get_session(new_password_conn, :user_token) != get_session(conn, :user_token)
 
       assert Phoenix.Flash.get(new_password_conn.assigns.flash, :info) =~
-               "Senha atualizada com sucesso."
+               "Password updated successfully"
 
       assert Accounts.get_user_by_email_and_password(user.email, new_password)
     end
@@ -136,7 +136,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
           }
         })
 
-      assert result =~ "Salvar senha"
+      assert result =~ "Save Password"
       assert result =~ "should be at least 12 character(s)"
       assert result =~ "does not match password"
     end
@@ -154,7 +154,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
         })
         |> render_submit()
 
-      assert result =~ "Salvar senha"
+      assert result =~ "Save Password"
       assert result =~ "should be at least 12 character(s)"
       assert result =~ "does not match password"
     end
@@ -179,7 +179,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
       assert {:live_redirect, %{to: path, flash: flash}} = redirect
       assert path == ~p"/users/settings"
       assert %{"info" => message} = flash
-      assert message == "Email alterado com sucesso."
+      assert message == "Email changed successfully."
       refute Accounts.get_user_by_email(user.email)
       assert Accounts.get_user_by_email(email)
 
@@ -188,7 +188,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
       assert {:live_redirect, %{to: path, flash: flash}} = redirect
       assert path == ~p"/users/settings"
       assert %{"error" => message} = flash
-      assert message == "O link de alteracao de email e invalido ou expirou."
+      assert message == "Email change link is invalid or it has expired."
     end
 
     test "does not update email with invalid token", %{conn: conn, user: user} do
@@ -196,7 +196,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
       assert {:live_redirect, %{to: path, flash: flash}} = redirect
       assert path == ~p"/users/settings"
       assert %{"error" => message} = flash
-      assert message == "O link de alteracao de email e invalido ou expirou."
+      assert message == "Email change link is invalid or it has expired."
       assert Accounts.get_user_by_email(user.email)
     end
 
@@ -206,7 +206,7 @@ defmodule EscalimetroWeb.UserLive.SettingsTest do
       assert {:redirect, %{to: path, flash: flash}} = redirect
       assert path == ~p"/users/log-in"
       assert %{"error" => message} = flash
-      assert message == "Voce precisa entrar para acessar esta pagina."
+      assert message == "You must log in to access this page."
     end
   end
 end
