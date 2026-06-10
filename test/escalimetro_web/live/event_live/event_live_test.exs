@@ -41,6 +41,68 @@ defmodule EscalimetroWeb.EventLiveTest do
     assert {:ok, _show, _html} = follow_redirect(redirect, conn, ~p"/events/#{event}")
   end
 
+  test "management editor blocks voting tab until changes are saved", %{
+    conn: conn,
+    scope: scope
+  } do
+    event = event_fixture(scope)
+    {:ok, view, _html} = live(conn, ~p"/events/#{event}")
+
+    assert has_element?(view, "#event-management-form")
+    new_title = unique_event_title()
+
+    view
+    |> form("#event-management-form", event: %{title: new_title})
+    |> render_change()
+
+    assert has_element?(view, "#event-management-dirty-indicator")
+
+    assert has_element?(view, "#event-voting-tab[disabled]")
+    assert has_element?(view, "#event-editor-panel")
+    refute has_element?(view, "#event-participant-panel")
+
+    view
+    |> form("#event-management-form", event: %{title: new_title})
+    |> render_submit()
+
+    assert Repo.get!(Event, event.id).title == new_title
+    refute has_element?(view, "#event-management-dirty-indicator")
+
+    view
+    |> element("#event-voting-tab")
+    |> render_click()
+
+    assert has_element?(view, "#event-participant-panel")
+  end
+
+  test "management voting tab shows accordion results with voter intensity", %{
+    conn: conn,
+    scope: scope
+  } do
+    event = event_fixture(scope)
+    ballot = ballot_fixture(scope, event, %{show_justifications: true})
+    ballot = Escalimetro.Events.get_ballot!(scope, event, ballot.id)
+    option = hd(ballot.options)
+    participant = event_participant_fixture(scope, event, %{display_name: "Ana"})
+
+    assert {:ok, vote} =
+             Escalimetro.Events.cast_vote(participant, ballot, %{
+               "ballot_option_id" => option.id,
+               "intensity" => "true",
+               "justification" => "Preferencia forte"
+             })
+
+    {:ok, view, _html} = live(conn, ~p"/events/#{event}")
+
+    view
+    |> element("#event-voting-tab")
+    |> render_click()
+
+    assert has_element?(view, "#event-management-voting-results-#{ballot.id}")
+    assert has_element?(view, "#event-management-result-option-#{ballot.id}-option-#{option.id}")
+    assert has_element?(view, "#event-management-result-vote-#{vote.id}")
+  end
+
   test "user cannot access another user's event", %{conn: conn} do
     other_event = event_fixture()
 

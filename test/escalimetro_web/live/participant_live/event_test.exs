@@ -7,6 +7,40 @@ defmodule EscalimetroWeb.ParticipantLive.EventTest do
   alias Escalimetro.Events.{BallotOption, Vote}
   alias Escalimetro.Repo
 
+  test "guest who enters through invite has vote counted immediately", %{conn: conn} do
+    scope = Escalimetro.AccountsFixtures.user_scope_fixture()
+    event = event_fixture(scope)
+    ballot = ballot_fixture(scope, event)
+    [option | _] = ballot.options
+
+    assert {:ok, invite} = Escalimetro.Events.rotate_event_invite(scope, event)
+
+    assert {:ok, participant} =
+             Escalimetro.Events.enter_event_invite(%Escalimetro.Accounts.Scope{}, invite, %{
+               "display_name" => "Visitante"
+             })
+
+    {:ok, view, _html} = live(conn, ~p"/events/public/#{participant.participant_token}")
+
+    assert has_element?(view, "#participant-ballot-results-#{ballot.id}", "0 voto(s)")
+
+    view
+    |> form("#vote-form-#{ballot.id}", vote: %{ballot_option_id: option.id})
+    |> render_submit()
+
+    assert %Vote{ballot_option_id: option_id, rejected_at: nil} =
+             Repo.get_by!(Vote, participant_id: participant.id, ballot_id: ballot.id)
+
+    assert option_id == option.id
+    assert has_element?(view, "#participant-ballot-results-#{ballot.id}", "1 voto(s)")
+
+    assert has_element?(
+             view,
+             "#participant-result-option-#{ballot.id}-option-#{option.id}",
+             "Visitante"
+           )
+  end
+
   test "participant votes in a multiple choice ballot with justification", %{conn: conn} do
     scope = Escalimetro.AccountsFixtures.user_scope_fixture()
     event = event_fixture(scope)
@@ -42,6 +76,8 @@ defmodule EscalimetroWeb.ParticipantLive.EventTest do
              Repo.get_by!(Vote, participant_id: participant.id, ballot_id: ballot.id)
 
     assert option_id == option.id
+    assert has_element?(view, "#vote-option-button-#{option.id}[aria-pressed=true]")
+    assert has_element?(view, "#vote-option-selected-label-#{option.id}")
   end
 
   test "participant votes in a yes no maybe ballot", %{conn: conn} do
@@ -61,6 +97,9 @@ defmodule EscalimetroWeb.ParticipantLive.EventTest do
 
     assert %Vote{value: "yes", intensity: false} =
              Repo.get_by!(Vote, participant_id: participant.id, ballot_id: ballot.id)
+
+    assert has_element?(view, "#vote-option-button-#{ballot.id}-yes[aria-pressed=true]")
+    assert has_element?(view, "#vote-option-selected-label-#{ballot.id}-yes")
   end
 
   test "participant sees live counts details and can remove a vote", %{conn: conn} do

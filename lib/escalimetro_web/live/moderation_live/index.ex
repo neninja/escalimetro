@@ -23,7 +23,8 @@ defmodule EscalimetroWeb.ModerationLive.Index do
             <div>
               <h1 class="text-3xl font-semibold leading-tight">Moderacao</h1>
               <p class="mt-2 text-sm leading-6 text-base-content/70">
-                Rejeite ou restaure votos mantendo historico e transparencia.
+                Votos ativos entram nos resultados imediatamente. Use esta area apenas para
+                acompanhar historico e rejeitar sugestoes inadequadas.
               </p>
             </div>
             <.button navigate={~p"/events/#{@event}/participants"} class="btn btn-soft">
@@ -69,40 +70,12 @@ defmodule EscalimetroWeb.ModerationLive.Index do
               </div>
 
               <div class="w-full shrink-0 lg:w-80">
-                <.form
-                  :if={is_nil(vote.rejected_at) and @event.status != "closed"}
-                  for={to_form(%{}, as: :vote)}
-                  id={"vote-reject-form-#{vote.id}"}
-                  phx-submit="reject_vote"
-                  phx-value-id={vote.id}
-                  class="flex flex-col gap-2"
+                <p
+                  id={"moderation-vote-immediate-note-#{vote.id}"}
+                  class="rounded-md bg-base-200/70 px-3 py-2 text-sm text-base-content/65"
                 >
-                  <.input
-                    name="vote[rejection_reason]"
-                    value=""
-                    type="text"
-                    label="Motivo opcional"
-                    maxlength="500"
-                  />
-                  <button
-                    id={"vote-reject-button-#{vote.id}"}
-                    type="submit"
-                    class="inline-flex items-center justify-center gap-2 rounded-md border border-error/30 px-3 py-2 text-sm font-semibold text-error transition hover:-translate-y-0.5 hover:bg-error/10"
-                  >
-                    <.icon name="hero-x-circle" class="size-4" /> Rejeitar voto
-                  </button>
-                </.form>
-
-                <button
-                  :if={not is_nil(vote.rejected_at) and @event.status != "closed"}
-                  id={"vote-restore-button-#{vote.id}"}
-                  type="button"
-                  phx-click="restore_vote"
-                  phx-value-id={vote.id}
-                  class="inline-flex w-full items-center justify-center gap-2 rounded-md border border-emerald-500/30 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:-translate-y-0.5 hover:bg-emerald-500/10"
-                >
-                  <.icon name="hero-arrow-path" class="size-4" /> Restaurar voto
-                </button>
+                  Voto computado instantaneamente enquanto estiver ativo.
+                </p>
               </div>
             </div>
           </article>
@@ -180,46 +153,6 @@ defmodule EscalimetroWeb.ModerationLive.Index do
   end
 
   @impl true
-  def handle_event("reject_vote", %{"id" => id, "vote" => vote_params}, socket) do
-    vote = find_vote(socket.assigns.votes, id)
-
-    case vote && Events.reject_vote(socket.assigns.current_scope, vote, vote_params) do
-      {:ok, _vote} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Voto rejeitado com sucesso.")
-         |> assign_votes()}
-
-      {:error, :closed_event} ->
-        {:noreply, put_flash(socket, :error, "Eventos fechados nao aceitam moderacao.")}
-
-      _other ->
-        {:noreply, put_flash(socket, :error, "Nao foi possivel rejeitar voto.")}
-    end
-  end
-
-  def handle_event("restore_vote", %{"id" => id}, socket) do
-    vote = find_vote(socket.assigns.votes, id)
-
-    case vote && Events.restore_vote(socket.assigns.current_scope, vote) do
-      {:ok, _vote} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Voto restaurado com sucesso.")
-         |> assign_votes()}
-
-      {:error, :closed_event} ->
-        {:noreply, put_flash(socket, :error, "Eventos fechados nao aceitam moderacao.")}
-
-      {:error, :invalidated_participant} ->
-        {:noreply,
-         put_flash(socket, :error, "Participante invalidado nao pode ter voto restaurado.")}
-
-      _other ->
-        {:noreply, put_flash(socket, :error, "Nao foi possivel restaurar voto.")}
-    end
-  end
-
   def handle_event("reject_option", %{"id" => id}, socket) do
     option = find_option(socket.assigns.suggested_options, id)
 
@@ -261,11 +194,6 @@ defmodule EscalimetroWeb.ModerationLive.Index do
     socket
     |> put_flash(:error, "Evento nao encontrado ou sem acesso.")
     |> push_navigate(to: ~p"/events")
-  end
-
-  defp find_vote(votes, id) do
-    parsed_id = parse_id(id)
-    Enum.find(votes, &(&1.id == parsed_id))
   end
 
   defp find_option(options, id) do
