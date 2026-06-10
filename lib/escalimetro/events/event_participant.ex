@@ -10,7 +10,6 @@ defmodule Escalimetro.Events.EventParticipant do
   @statuses ~w(active invalidated)
 
   schema "event_participants" do
-    field :participant_token, :string
     field :display_name, :string
     field :kind, :string, default: "guest"
     field :status, :string, default: "active"
@@ -34,7 +33,7 @@ defmodule Escalimetro.Events.EventParticipant do
   def changeset(event_participant, attrs) do
     event_participant
     |> cast(attrs, [:display_name, :kind, :status, :invalidated_at, :metadata])
-    |> validate_required([:event_id, :participant_token, :kind, :status])
+    |> validate_required([:event_id, :kind, :status])
     |> validate_length(:display_name, max: 160)
     |> validate_inclusion(:kind, @kinds)
     |> validate_inclusion(:status, @statuses)
@@ -42,7 +41,6 @@ defmodule Escalimetro.Events.EventParticipant do
     |> validate_invalidated_at()
     |> foreign_key_constraint(:event_id)
     |> foreign_key_constraint(:user_id)
-    |> unique_constraint(:participant_token)
     |> unique_constraint([:event_id, :user_id])
     |> check_constraint(:kind, name: :event_participants_kind_check)
     |> check_constraint(:status, name: :event_participants_status_check)

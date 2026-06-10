@@ -12,7 +12,6 @@ defmodule Escalimetro.Application do
       Escalimetro.Repo,
       {DNSCluster, query: Application.get_env(:escalimetro, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Escalimetro.PubSub},
-      EscalimetroWeb.Presence,
       # Start a worker by calling: Escalimetro.Worker.start_link(arg)
       # {Escalimetro.Worker, arg},
       # Start to serve requests, typically the last entry

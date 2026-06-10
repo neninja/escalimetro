@@ -1,10 +1,10 @@
 defmodule EscalimetroWeb.ModerationLive.IndexTest do
-  use EscalimetroWeb.ConnCase, async: false
+  use EscalimetroWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
   import Escalimetro.EventsFixtures
 
-  alias Escalimetro.Events.{BallotOption, Vote}
+  alias Escalimetro.Events.Vote
   alias Escalimetro.Repo
 
   setup :register_and_log_in_user
@@ -43,30 +43,5 @@ defmodule EscalimetroWeb.ModerationLive.IndexTest do
 
     assert path == ~p"/events"
     assert %{"error" => "Evento nao encontrado ou sem acesso."} = flash
-  end
-
-  test "user rejects a suggested option and active votes for it", %{conn: conn, scope: scope} do
-    event = event_fixture(scope)
-    ballot = ballot_fixture(scope, event, %{allow_sugestion: true})
-    participant = event_participant_fixture(scope, event)
-    voter = event_participant_fixture(scope, event)
-
-    assert {:ok, option} =
-             Escalimetro.Events.suggest_option(participant, ballot, %{label: "Sugestao moderada"})
-
-    assert {:ok, vote} =
-             Escalimetro.Events.cast_vote(voter, ballot, %{ballot_option_id: option.id})
-
-    {:ok, view, _html} = live(conn, ~p"/events/#{event}/moderation")
-
-    assert has_element?(view, "#moderation-suggested-options-list")
-    assert has_element?(view, "#suggestion-reject-button-#{option.id}")
-
-    view
-    |> element("#suggestion-reject-button-#{option.id}")
-    |> render_click()
-
-    assert Repo.get!(BallotOption, option.id).rejected_at
-    assert Repo.get!(Vote, vote.id).rejected_at
   end
 end

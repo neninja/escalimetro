@@ -1,5 +1,5 @@
 defmodule EscalimetroWeb.EventLiveTest do
-  use EscalimetroWeb.ConnCase, async: false
+  use EscalimetroWeb.ConnCase, async: true
 
   import Phoenix.LiveViewTest
   import Escalimetro.EventsFixtures

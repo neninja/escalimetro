@@ -27,10 +27,4 @@ defmodule Escalimetro.Events.BallotOption do
     |> foreign_key_constraint(:suggested_by_participant_id)
     |> unique_constraint([:ballot_id, :label])
   end
-
-  def reject_changeset(ballot_option, rejected_at) do
-    ballot_option
-    |> change(rejected_at: rejected_at)
-    |> validate_required([:ballot_id, :label, :position, :rejected_at])
-  end
 end

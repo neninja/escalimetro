@@ -263,7 +263,6 @@ defmodule EscalimetroWeb.EventLive.Show do
   def mount(%{"id" => id}, _session, socket) do
     case fetch_event(socket, id) do
       {:ok, event} ->
-        if connected?(socket), do: Events.subscribe_event(event)
         {:ok, assign_event(socket, event)}
 
       :error ->
@@ -340,12 +339,6 @@ defmodule EscalimetroWeb.EventLive.Show do
       {:error, _changeset} ->
         {:noreply, put_flash(socket, :error, "Nao foi possivel reabrir a pauta.")}
     end
-  end
-
-  @impl true
-  def handle_info({:event_changed, _event_name, _event_id}, socket) do
-    event = Events.get_event!(socket.assigns.current_scope, socket.assigns.event.id)
-    {:noreply, assign_event(socket, event)}
   end
 
   defp fetch_event(socket, id) do
