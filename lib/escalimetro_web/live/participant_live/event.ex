@@ -75,7 +75,7 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                     :if={(current_votes == [] and latest_vote) && latest_vote.rejected_at}
                     class="rounded-full bg-error/10 px-2 py-1 text-xs font-semibold text-error"
                   >
-                    Voto registrado rejeitado
+                    Voto rejeitado
                   </span>
                   <span
                     :if={ballot.kind == "multiple_choice"}
@@ -106,7 +106,6 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
               <div class="grid gap-2 sm:grid-cols-2">
                 <%= if ballot.kind == "multiple_choice" do %>
                   <div :for={option <- ballot.options}>
-                    <% option_result = result_option(result, "option-#{option.id}") %>
                     <input
                       type="radio"
                       name="vote[ballot_option_id]"
@@ -120,7 +119,6 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                       type="submit"
                       name="vote[ballot_option_id]"
                       value={option.id}
-                      aria-pressed={pressed_value(option_selected?(current_votes, option.id))}
                       disabled={not is_nil(blocked_reason)}
                       class={[
                         "w-full rounded-lg border px-4 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
@@ -130,50 +128,17 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                           "border-base-content/10 hover:-translate-y-0.5 hover:border-primary/30"
                       ]}
                     >
-                      <span class="flex items-start justify-between gap-3">
-                        <span class="flex min-w-0 items-start gap-3">
-                          <span
-                            class={[
-                              "vote-selection-indicator",
-                              "mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded border",
-                              option_selected?(current_votes, option.id) &&
-                                "border-primary bg-primary text-primary-content",
-                              !option_selected?(current_votes, option.id) &&
-                                "border-base-content/20 bg-base-100"
-                            ]}
-                            id={"vote-option-indicator-#{option.id}"}
-                          >
-                            <.icon
-                              :if={option_selected?(current_votes, option.id)}
-                              name="hero-check"
-                              class="size-3.5"
-                            />
-                          </span>
-                          <span class="min-w-0">
-                            <span class="block truncate">{option.label}</span>
-                            <span
-                              :if={option.suggested_by_participant_id}
-                              class="mt-1 block text-xs font-normal text-base-content/55"
-                            >
-                              Sugerido por {suggestion_author(option)}
-                            </span>
-                          </span>
+                      <span class="flex items-center justify-between gap-2">
+                        <span>{option.label}</span>
+                        <span :if={option_selected?(current_votes, option.id)} class="text-xs">
+                          Selecionada
                         </span>
-                        <span class="flex shrink-0 flex-col items-end gap-1 text-xs">
-                          <span
-                            :if={option_selected?(current_votes, option.id)}
-                            id={"vote-option-selected-label-#{option.id}"}
-                            class="rounded-full bg-primary/10 px-2 py-1 font-semibold text-primary"
-                          >
-                            Selecionada
-                          </span>
-                          <span class="rounded-full bg-base-200 px-2 py-1">
-                            {option_result.votes_count} voto(s)
-                          </span>
-                          <span class="rounded-full bg-base-200 px-2 py-1">
-                            {option_result.intensity_count} quero muito
-                          </span>
-                        </span>
+                      </span>
+                      <span
+                        :if={option.suggested_by_participant_id}
+                        class="mt-1 block text-xs font-normal text-base-content/55"
+                      >
+                        Sugerido por {suggestion_author(option)}
                       </span>
                     </button>
                     <button
@@ -190,7 +155,6 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                   </div>
                 <% else %>
                   <div :for={{value, label} <- yes_no_maybe_options()}>
-                    <% option_result = result_option(result, "value-#{value}") %>
                     <input
                       type="radio"
                       name="vote[value]"
@@ -204,7 +168,6 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                       type="submit"
                       name="vote[value]"
                       value={value}
-                      aria-pressed={pressed_value(current_vote && current_vote.value == value)}
                       disabled={not is_nil(blocked_reason)}
                       class={[
                         "w-full rounded-lg border px-4 py-3 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
@@ -214,40 +177,7 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                           "border-base-content/10 hover:-translate-y-0.5 hover:border-primary/30"
                       ]}
                     >
-                      <span class="flex items-center justify-between gap-3">
-                        <span class="flex min-w-0 items-center gap-3">
-                          <span
-                            class={[
-                              "vote-selection-indicator",
-                              "inline-flex size-5 shrink-0 items-center justify-center rounded-full border",
-                              current_vote && current_vote.value == value &&
-                                "border-primary bg-primary text-primary-content",
-                              (!current_vote || current_vote.value != value) &&
-                                "border-base-content/20 bg-base-100"
-                            ]}
-                            id={"vote-option-indicator-#{ballot.id}-#{value}"}
-                          >
-                            <.icon
-                              :if={current_vote && current_vote.value == value}
-                              name="hero-check"
-                              class="size-3.5"
-                            />
-                          </span>
-                          <span class="truncate">{label}</span>
-                        </span>
-                        <span class="flex shrink-0 flex-col items-end gap-1 text-xs">
-                          <span
-                            :if={current_vote && current_vote.value == value}
-                            id={"vote-option-selected-label-#{ballot.id}-#{value}"}
-                            class="rounded-full bg-primary/10 px-2 py-1 font-semibold text-primary"
-                          >
-                            Selecionada
-                          </span>
-                          <span class="rounded-full bg-base-200 px-2 py-1">
-                            {option_result.votes_count} voto(s)
-                          </span>
-                        </span>
-                      </span>
+                      {label}
                     </button>
                     <button
                       :if={
@@ -332,13 +262,11 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                 <details
                   :for={option <- result.option_results}
                   id={"participant-result-option-#{ballot.id}-#{option.key}"}
-                  class="rounded-lg border border-base-content/10 bg-base-100 p-3 open:bg-base-200/60"
+                  class="rounded-md border border-base-content/10 bg-base-100 p-3"
                 >
                   <summary class="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold">
-                    <span class="min-w-0">
-                      <span class="truncate">{option.label}</span>
-                    </span>
-                    <span class="flex shrink-0 flex-wrap justify-end gap-2 text-xs">
+                    <span>{option.label}</span>
+                    <span class="flex flex-wrap justify-end gap-2 text-xs">
                       <span class="rounded-full bg-base-200 px-2 py-1">
                         {option.votes_count} voto(s)
                       </span>
@@ -365,7 +293,7 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
                           :if={vote.intensity}
                           class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
                         >
-                          Quero muito
+                          favorito
                         </span>
                       </div>
                       <p
@@ -538,26 +466,16 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
   end
 
   defp assign_participant_event(socket, data) do
-    update_existing_stream? = Map.has_key?(socket.assigns, :ballots)
-
-    socket =
-      socket
-      |> assign(:event, data.event)
-      |> assign(:participant, data.participant)
-      |> assign(:participant_token, data.participant.participant_token)
-      |> assign(:ballots, data.ballots)
-      |> assign(:votes_by_ballot, data.votes_by_ballot)
-      |> assign(:active_votes_by_ballot, data.active_votes_by_ballot)
-      |> assign(:results_by_ballot, Map.new(data.results, &{&1.ballot.id, &1}))
-      |> assign_online_count()
-
-    if update_existing_stream? do
-      Enum.reduce(data.ballots, socket, fn ballot, socket ->
-        stream_insert(socket, :ballots, ballot)
-      end)
-    else
-      stream(socket, :ballots, data.ballots, reset: true)
-    end
+    socket
+    |> assign(:event, data.event)
+    |> assign(:participant, data.participant)
+    |> assign(:participant_token, data.participant.participant_token)
+    |> assign(:ballots, data.ballots)
+    |> assign(:votes_by_ballot, data.votes_by_ballot)
+    |> assign(:active_votes_by_ballot, data.active_votes_by_ballot)
+    |> assign(:results_by_ballot, Map.new(data.results, &{&1.ballot.id, &1}))
+    |> assign_online_count()
+    |> stream(:ballots, data.ballots, reset: true)
   end
 
   defp reload_participant_event(socket) do
@@ -606,9 +524,6 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
     Enum.any?(votes, &(&1.ballot_option_id == option_id))
   end
 
-  defp pressed_value(true), do: "true"
-  defp pressed_value(_value), do: "false"
-
   defp current_vote_button_name(%{ballot_option_id: option_id}) when not is_nil(option_id) do
     "vote[ballot_option_id]"
   end
@@ -625,16 +540,6 @@ defmodule EscalimetroWeb.ParticipantLive.Event do
 
   defp selection_mode_label("multi_choice"), do: "Varias respostas"
   defp selection_mode_label(_mode), do: "Resposta unica"
-
-  defp result_option(nil, _key), do: empty_option_result()
-
-  defp result_option(result, key) do
-    Enum.find(result.option_results, empty_option_result(), &(&1.key == key))
-  end
-
-  defp empty_option_result do
-    %{votes_count: 0, intensity_count: 0}
-  end
 
   defp tied_labels(result) do
     result.tied_options

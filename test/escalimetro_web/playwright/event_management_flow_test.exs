@@ -40,7 +40,7 @@ defmodule EscalimetroWeb.Playwright.EventManagementFlowTest do
     assert Repo.get_by!(Ballot, title: title).status == "closed"
   end
 
-  test "admin invalidates participant and sees votes as immediately computed", %{conn: conn} do
+  test "admin invalidates participant and moderates votes", %{conn: conn} do
     user = user_fixture() |> set_password()
     scope = user_scope_fixture(user)
     event = event_fixture(scope)
@@ -51,8 +51,8 @@ defmodule EscalimetroWeb.Playwright.EventManagementFlowTest do
     invalidated_vote =
       vote_fixture(scope, event, invalidated_participant, ballot, %{value: "yes"})
 
-    active_participant = event_participant_fixture(scope, event)
-    active_vote = vote_fixture(scope, event, active_participant, ballot, %{value: "no"})
+    moderated_participant = event_participant_fixture(scope, event)
+    moderated_vote = vote_fixture(scope, event, moderated_participant, ballot, %{value: "no"})
 
     session =
       conn
@@ -68,9 +68,16 @@ defmodule EscalimetroWeb.Playwright.EventManagementFlowTest do
     session
     |> visit(~p"/events/#{event}/moderation")
     |> assert_has("#moderation-votes-list")
-    |> assert_has("#moderation-vote-immediate-note-#{active_vote.id}")
+    |> within("#vote-reject-form-#{moderated_vote.id}", fn session ->
+      session
+      |> fill_in("Motivo opcional", with: "Duplicado")
+      |> click_button("Rejeitar voto")
+    end)
+    |> assert_has("#flash-info", text: "Voto rejeitado com sucesso.")
+    |> click_button("#vote-restore-button-#{moderated_vote.id}", "Restaurar voto")
+    |> assert_has("#flash-info", text: "Voto restaurado com sucesso.")
 
-    assert is_nil(Repo.get!(Vote, active_vote.id).rejected_at)
+    assert is_nil(Repo.get!(Vote, moderated_vote.id).rejected_at)
   end
 
   defp log_in_with_magic_link(session, user) do

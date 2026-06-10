@@ -118,10 +118,10 @@ defmodule EscalimetroWeb.EventLive.Show do
               @active_tab != "editor" && "text-base-content/60 hover:text-base-content"
             ]}
           >
-            <.icon name="hero-pencil-square" class="size-4" /> Editar
+            <.icon name="hero-pencil-square" class="size-4" /> Editor
           </button>
           <button
-            id="event-voting-tab"
+            id="event-participant-tab"
             type="button"
             phx-click="select_tab"
             phx-value-tab="participant"
@@ -132,95 +132,11 @@ defmodule EscalimetroWeb.EventLive.Show do
               @active_tab != "participant" && "text-base-content/60 hover:text-base-content"
             ]}
           >
-            <.icon name="hero-check-circle" class="size-4" /> Votar
+            <.icon name="hero-eye" class="size-4" /> Participante
           </button>
         </nav>
 
         <section :if={@active_tab == "editor"} id="event-editor-panel" class="space-y-4">
-          <.form
-            :if={@event.status != "closed"}
-            for={@event_form}
-            id="event-management-form"
-            phx-change="validate_event"
-            phx-submit="save_event"
-            class="space-y-5 rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm"
-          >
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h2 class="text-xl font-semibold">Dados do evento</h2>
-                <p class="mt-1 text-sm text-base-content/65">
-                  Salve as alteracoes antes de alternar para a aba de votacao.
-                </p>
-              </div>
-              <span
-                :if={@editor_dirty?}
-                id="event-management-dirty-indicator"
-                class="inline-flex items-center gap-2 rounded-full bg-warning/10 px-3 py-1 text-xs font-semibold text-warning"
-              >
-                <.icon name="hero-exclamation-triangle" class="size-4" /> Alteracoes pendentes
-              </span>
-            </div>
-
-            <div class="grid gap-4 sm:grid-cols-2">
-              <.input
-                field={@event_form[:title]}
-                id="event-management-title-input"
-                type="text"
-                label="Nome"
-                maxlength="160"
-                required
-              />
-              <div class="rounded-md border border-base-content/10 bg-base-200/40 px-3 py-2">
-                <p class="text-sm font-semibold">Status</p>
-                <p class="mt-2 text-sm text-base-content/70">{status_label(@event.status)}</p>
-              </div>
-            </div>
-
-            <.input
-              field={@event_form[:description]}
-              id="event-management-description-input"
-              type="textarea"
-              label="Descricao"
-              rows="4"
-              maxlength="5000"
-            />
-
-            <div class="grid gap-4 sm:grid-cols-2">
-              <.input
-                field={@event_form[:scheduled_at]}
-                id="event-management-scheduled-at-input"
-                type="datetime-local"
-                label="Data e hora"
-              />
-              <.input
-                field={@event_form[:location]}
-                id="event-management-location-input"
-                type="text"
-                label="Local"
-                maxlength="160"
-              />
-            </div>
-
-            <div class="flex justify-end border-t border-base-content/10 pt-4">
-              <.button
-                id="event-management-save-button"
-                variant="primary"
-                phx-disable-with="Salvando..."
-                class="btn btn-primary"
-              >
-                <.icon name="hero-check" class="size-4" /> Salvar
-              </.button>
-            </div>
-          </.form>
-
-          <div
-            :if={@event.status == "closed"}
-            id="event-management-closed-editor"
-            class="rounded-lg border border-base-content/10 bg-base-100 p-4 text-sm text-base-content/65"
-          >
-            Eventos fechados nao podem receber alteracoes. Reabra o evento para editar.
-          </div>
-
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 class="text-xl font-semibold">Pautas</h2>
@@ -326,9 +242,9 @@ defmodule EscalimetroWeb.EventLive.Show do
 
         <section :if={@active_tab == "participant"} id="event-participant-panel" class="space-y-4">
           <div>
-            <h2 class="text-xl font-semibold">Votacao</h2>
+            <h2 class="text-xl font-semibold">Visao do participante</h2>
             <p class="mt-1 text-sm text-base-content/65">
-              Visualize as opcoes, votos parciais, favoritos e justificativas abertas por sanfona.
+              Previa das pautas abertas e valores disponiveis aos participantes.
             </p>
           </div>
 
@@ -345,87 +261,19 @@ defmodule EscalimetroWeb.EventLive.Show do
               id={id}
               class="rounded-lg border border-base-content/10 bg-base-100 p-4 shadow-sm"
             >
-              <% result = Map.get(@results_by_ballot, ballot.id) %>
-
-              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <div class="flex flex-wrap items-center gap-2">
-                    <h3 class="font-semibold">{ballot.title}</h3>
-                    <span class="rounded-full bg-base-200 px-2 py-1 text-xs font-semibold">
-                      {ballot_status_label(ballot.status)}
-                    </span>
-                    <span
-                      :if={ballot.kind == "multiple_choice"}
-                      class="rounded-full bg-base-200 px-2 py-1 text-xs font-semibold"
-                    >
-                      {selection_mode_label(ballot.selection_mode)}
-                    </span>
-                  </div>
-                  <p :if={ballot.description} class="mt-2 text-sm leading-6 text-base-content/65">
-                    {ballot.description}
-                  </p>
-                </div>
-                <span
-                  :if={result}
-                  class="rounded-full bg-primary/10 px-3 py-1 text-sm font-semibold text-primary"
-                >
-                  {result.active_votes_count} voto(s)
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="font-semibold">{ballot.title}</h3>
+                <span class="rounded-full bg-base-200 px-2 py-1 text-xs font-semibold">
+                  {ballot_status_label(ballot.status)}
                 </span>
               </div>
-
-              <div
-                :if={result}
-                id={"event-management-voting-results-#{ballot.id}"}
-                class="mt-4 space-y-2"
-              >
-                <details
-                  :for={option <- result.option_results}
-                  id={"event-management-result-option-#{ballot.id}-#{option.key}"}
-                  class="rounded-lg border border-base-content/10 bg-base-200/35 p-3 open:bg-base-200/60"
+              <div class="mt-4 flex flex-wrap gap-2">
+                <span
+                  :for={label <- participant_choice_labels(ballot)}
+                  class="rounded-full border border-base-content/10 px-3 py-1 text-sm font-medium"
                 >
-                  <summary class="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold">
-                    <span class="min-w-0">
-                      <span class="truncate">{option.label}</span>
-                    </span>
-                    <span class="flex shrink-0 flex-wrap justify-end gap-2 text-xs">
-                      <span class="rounded-full bg-base-100 px-2 py-1">
-                        {option.votes_count} voto(s)
-                      </span>
-                      <span
-                        :if={ballot.kind == "multiple_choice"}
-                        class="rounded-full bg-base-100 px-2 py-1"
-                      >
-                        {option.intensity_count} quero muito
-                      </span>
-                    </span>
-                  </summary>
-                  <div class="mt-3 space-y-2">
-                    <p :if={option.voter_results == []} class="text-sm text-base-content/55">
-                      Nenhum voto ativo nesta opcao.
-                    </p>
-                    <div
-                      :for={vote <- option.voter_results}
-                      id={"event-management-result-vote-#{vote.id}"}
-                      class="rounded-md bg-base-100 px-3 py-2 text-sm"
-                    >
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span class="font-semibold">{vote.participant_name}</span>
-                        <span
-                          :if={vote.intensity}
-                          class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
-                        >
-                          Quero muito
-                        </span>
-                      </div>
-                      <p
-                        :if={ballot.show_justifications and vote.justification}
-                        class="mt-1 text-base-content/65"
-                      >
-                        {vote.justification}
-                      </p>
-                    </div>
-                  </div>
-                </details>
+                  {label}
+                </span>
               </div>
             </article>
           </div>
@@ -495,45 +343,7 @@ defmodule EscalimetroWeb.EventLive.Show do
          "Salve as alteracoes pendentes antes de abrir a visao de participante."
        )}
     else
-      socket = assign(socket, :active_tab, tab)
-
-      socket =
-        if tab == "participant" do
-          stream(socket, :participant_ballots, socket.assigns.ballots, reset: true)
-        else
-          socket
-        end
-
-      {:noreply, socket}
-    end
-  end
-
-  def handle_event("validate_event", %{"event" => event_params}, socket) do
-    form =
-      socket.assigns.current_scope
-      |> Events.change_event(socket.assigns.event, event_params)
-      |> Map.put(:action, :validate)
-      |> to_form()
-
-    {:noreply, assign(socket, event_form: form, editor_dirty?: true)}
-  end
-
-  def handle_event("save_event", %{"event" => event_params}, socket) do
-    case Events.update_event(socket.assigns.current_scope, socket.assigns.event, event_params) do
-      {:ok, event} ->
-        {:noreply,
-         socket
-         |> put_flash(:info, "Evento atualizado com sucesso.")
-         |> assign_event(event)}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, event_form: to_form(changeset, action: :insert))}
-
-      {:error, :closed_event} ->
-        {:noreply, put_flash(socket, :error, "Eventos fechados nao podem ser editados.")}
-
-      {:error, :unauthorized} ->
-        {:noreply, redirect_to_events(socket)}
+      {:noreply, assign(socket, :active_tab, tab)}
     end
   end
 
@@ -587,25 +397,15 @@ defmodule EscalimetroWeb.EventLive.Show do
 
   defp assign_event(socket, event) do
     ballots = Events.list_ballots(socket.assigns.current_scope, event)
-    results = Events.get_event_results(socket.assigns.current_scope, event)
 
     assign(socket,
       event: event,
-      event_form: event_form(socket.assigns.current_scope, event),
-      ballots: ballots,
       can_manage_event?: Events.can_manage_event?(socket.assigns.current_scope, event),
       active_tab: Map.get(socket.assigns, :active_tab, "editor"),
-      editor_dirty?: false,
-      results_by_ballot: Map.new(results.ballot_results, &{&1.ballot.id, &1})
+      editor_dirty?: false
     )
     |> stream(:ballots, ballots, reset: true)
     |> stream(:participant_ballots, ballots, reset: true)
-  end
-
-  defp event_form(scope, event) do
-    scope
-    |> Events.change_event(event)
-    |> to_form()
   end
 
   defp redirect_to_events(socket) do
@@ -646,5 +446,13 @@ defmodule EscalimetroWeb.EventLive.Show do
   defp option_summary(%{options: options}) do
     active_options = Enum.reject(options, & &1.rejected_at)
     "#{length(active_options)} opcao(oes)"
+  end
+
+  defp participant_choice_labels(%{kind: "yes_no_maybe"}), do: ["Sim", "Nao", "Talvez"]
+
+  defp participant_choice_labels(%{options: options}) do
+    options
+    |> Enum.reject(& &1.rejected_at)
+    |> Enum.map(& &1.label)
   end
 end
