@@ -16,7 +16,7 @@ defmodule EscalimetroWeb.Playwright.EventFlowTest do
 
     session =
       conn
-      |> log_in_with_magic_link(user)
+      |> log_in_with_password(user.email)
       |> visit(~p"/events")
       |> click_link("Novo evento")
       |> assert_path(~p"/events/new")
@@ -63,19 +63,24 @@ defmodule EscalimetroWeb.Playwright.EventFlowTest do
     other_event = event_fixture(user_scope_fixture())
 
     conn
-    |> log_in_with_magic_link(user)
+    |> log_in_with_password(user.email)
     |> visit(~p"/events/#{other_event}")
     |> assert_path(~p"/events")
     |> assert_has("#flash-error", text: "Evento nao encontrado ou sem acesso.")
   end
 
-  defp log_in_with_magic_link(session, user) do
-    {token, _hashed_token} = generate_user_magic_link_token(user)
-
-    session
-    |> visit(~p"/users/log-in/#{token}")
-    |> assert_has("#login_form")
-    |> click_button("Log me in only this time")
+  defp log_in_with_password(conn, email, password \\ valid_user_password()) do
+    conn
+    |> visit(~p"/users/log-in")
+    |> assert_has("#login_form_password")
+    |> within("#login_form_password", fn session ->
+      session
+      |> fill_in("Email", with: email)
+      |> fill_in("Password", with: password)
+    end)
+    |> evaluate(
+      "HTMLFormElement.prototype.submit.call(document.querySelector('#login_form_password'))"
+    )
     |> assert_path(~p"/", timeout: 5_000)
   end
 

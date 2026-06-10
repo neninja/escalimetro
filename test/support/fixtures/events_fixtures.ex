@@ -26,19 +26,14 @@ defmodule Escalimetro.EventsFixtures do
   end
 
   def valid_ballot_attributes(attrs \\ %{}) do
-    attrs
-    |> Enum.into(%{
+    Enum.into(attrs, %{
       title: unique_ballot_title(),
       description: "Descricao da pauta",
       kind: "multiple_choice",
       allow_sugestion: false,
-      position: 0,
-      options: [
-        %{label: unique_option_label(), position: 0},
-        %{label: unique_option_label(), position: 1}
-      ]
+      status: "open",
+      position: 0
     })
-    |> maybe_drop_options_for_yes_no_maybe()
   end
 
   def ballot_fixture(scope, event, attrs \\ %{}) do
@@ -89,12 +84,4 @@ defmodule Escalimetro.EventsFixtures do
 
     vote
   end
-
-  defp maybe_drop_options_for_yes_no_maybe(%{kind: "yes_no_maybe"} = attrs),
-    do: Map.delete(attrs, :options)
-
-  defp maybe_drop_options_for_yes_no_maybe(%{"kind" => "yes_no_maybe"} = attrs),
-    do: Map.delete(attrs, "options")
-
-  defp maybe_drop_options_for_yes_no_maybe(attrs), do: attrs
 end

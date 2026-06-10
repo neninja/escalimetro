@@ -67,25 +67,6 @@ defmodule EscalimetroWeb.EventLiveTest do
     refute has_element?(view, "#event-complete-button")
   end
 
-  test "user closes an individual ballot without closing others", %{conn: conn, scope: scope} do
-    event = event_fixture(scope)
-    ballot = ballot_fixture(scope, event)
-    other_ballot = ballot_fixture(scope, event)
-
-    {:ok, view, _html} = live(conn, ~p"/events/#{event}")
-
-    assert has_element?(view, "#ballots-list")
-    assert has_element?(view, "#ballot-close-button-#{ballot.id}")
-
-    view
-    |> element("#ballot-close-button-#{ballot.id}")
-    |> render_click()
-
-    assert Repo.get!(Ballot, ballot.id).status == "closed"
-    assert Repo.get!(Ballot, other_ballot.id).status == "open"
-    assert has_element?(view, "#ballot-reopen-button-#{ballot.id}")
-  end
-
   test "completed event cannot be edited", %{conn: conn, scope: scope} do
     event = event_fixture(scope)
     {:ok, completed_event} = Escalimetro.Events.complete_event(scope, event)

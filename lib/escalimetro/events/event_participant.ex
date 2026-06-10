@@ -15,9 +15,6 @@ defmodule Escalimetro.Events.EventParticipant do
     field :status, :string, default: "active"
     field :invalidated_at, :utc_datetime
     field :metadata, :map, default: %{}
-    field :accepted_votes_count, :integer, virtual: true, default: 0
-    field :rejected_votes_count, :integer, virtual: true, default: 0
-    field :total_votes_count, :integer, virtual: true, default: 0
 
     belongs_to :event, Event
     belongs_to :user, User
@@ -45,14 +42,6 @@ defmodule Escalimetro.Events.EventParticipant do
     |> check_constraint(:kind, name: :event_participants_kind_check)
     |> check_constraint(:status, name: :event_participants_status_check)
     |> check_constraint(:display_name, name: :event_participants_guest_display_name_check)
-  end
-
-  def invalidate_changeset(event_participant, invalidated_at) do
-    event_participant
-    |> change(status: "invalidated", invalidated_at: invalidated_at)
-    |> validate_required([:event_id, :kind, :status, :invalidated_at])
-    |> validate_inclusion(:status, @statuses)
-    |> check_constraint(:status, name: :event_participants_status_check)
   end
 
   defp validate_identity(changeset) do
