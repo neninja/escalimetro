@@ -7,6 +7,7 @@ defmodule Escalimetro.Events do
 
   alias Ecto.Multi
   alias Escalimetro.Accounts.{Scope, User}
+  alias EscalimetroWeb.Endpoint
   alias Escalimetro.Events.{Ballot, BallotOption, Event, EventAdmin, EventParticipant, Vote}
   alias Escalimetro.Repo
 
@@ -30,6 +31,13 @@ defmodule Escalimetro.Events do
   end
 
   def get_event!(_scope, _id), do: raise(Ecto.NoResultsError, queryable: Event)
+
+  def get_public_event_by_invite!(public_invite_id) do
+    Event
+    |> where(public_invite_id: ^public_invite_id)
+    |> preload(:owner_user)
+    |> Repo.one!()
+  end
 
   def change_event(%Scope{} = scope, %Event{} = event, attrs \\ %{}) do
     scope
@@ -66,8 +74,12 @@ defmodule Escalimetro.Events do
       )
       |> Repo.transaction()
       |> case do
-        {:ok, %{event: event}} -> {:ok, event}
-        {:error, _operation, changeset, _changes} -> {:error, changeset}
+        {:ok, %{event: event}} ->
+          broadcast_event(event.id)
+          {:ok, event}
+
+        {:error, _operation, changeset, _changes} ->
+          {:error, changeset}
       end
     end
   end
@@ -99,11 +111,20 @@ defmodule Escalimetro.Events do
     if can_manage_event?(scope, event) do
       Ballot
       |> where(event_id: ^event.id)
+      |> preload([:options, votes: [:participant, :ballot_option]])
       |> order_by([b], asc: b.position, asc: b.inserted_at)
       |> Repo.all()
     else
       []
     end
+  end
+
+  def list_public_ballots(%Event{} = event) do
+    Ballot
+    |> where(event_id: ^event.id)
+    |> preload([:options, votes: [:participant, :ballot_option]])
+    |> order_by([b], asc: b.position, asc: b.inserted_at)
+    |> Repo.all()
   end
 
   def get_ballot!(%Scope{} = scope, %Event{} = event, id) do
@@ -124,6 +145,7 @@ defmodule Escalimetro.Events do
       %Ballot{event_id: event.id}
       |> Ballot.changeset(attrs)
       |> Repo.insert()
+      |> broadcast_result(event.id)
     end
   end
 
@@ -134,6 +156,18 @@ defmodule Escalimetro.Events do
       ballot
       |> Ballot.changeset(attrs)
       |> Repo.update()
+      |> broadcast_result(event.id)
+    end
+  end
+
+  def close_ballot(%Scope{} = scope, %Ballot{} = ballot) do
+    event = get_event!(scope, ballot.event_id)
+
+    with :ok <- ensure_event_editable(event) do
+      ballot
+      |> Ballot.close_changeset(DateTime.utc_now(:second))
+      |> Repo.update()
+      |> broadcast_result(event.id)
     end
   end
 
@@ -148,7 +182,7 @@ defmodule Escalimetro.Events do
     |> Repo.all()
   end
 
-  def change_ballot_option(%Scope{} = _scope, %BallotOption{} = ballot_option, attrs \\ %{}) do
+  def change_ballot_option(_scope, %BallotOption{} = ballot_option, attrs \\ %{}) do
     BallotOption.changeset(ballot_option, attrs)
   end
 
@@ -159,6 +193,24 @@ defmodule Escalimetro.Events do
       %BallotOption{ballot_id: ballot.id}
       |> BallotOption.changeset(attrs)
       |> Repo.insert()
+      |> broadcast_result(event.id)
+    end
+  end
+
+  def suggest_ballot_option(
+        %Event{} = event,
+        %EventParticipant{} = participant,
+        %Ballot{} = ballot,
+        attrs
+      ) do
+    with :ok <- ensure_vote_context(event, participant, ballot),
+         :ok <- ensure_event_accepts_votes(event),
+         :ok <- ensure_ballot_open(ballot),
+         :ok <- ensure_ballot_accepts_suggestions(ballot) do
+      %BallotOption{ballot_id: ballot.id, suggested_by_participant_id: participant.id}
+      |> BallotOption.changeset(attrs)
+      |> Repo.insert()
+      |> broadcast_result(event.id)
     end
   end
 
@@ -168,7 +220,19 @@ defmodule Escalimetro.Events do
     if can_manage_event?(scope, event) do
       EventParticipant
       |> where(event_id: ^event.id)
-      |> order_by([p], asc: p.display_name, asc: p.inserted_at)
+      |> order_by([p], asc: p.inserted_at, asc: p.id)
+      |> Repo.all()
+    else
+      []
+    end
+  end
+
+  def list_event_participants_for_review(%Scope{} = scope, %Event{} = event) do
+    if can_manage_event?(scope, event) do
+      EventParticipant
+      |> where(event_id: ^event.id)
+      |> order_by([p], asc: p.inserted_at, asc: p.id)
+      |> preload(votes: [:ballot, :ballot_option])
       |> Repo.all()
     else
       []
@@ -188,6 +252,32 @@ defmodule Escalimetro.Events do
       %EventParticipant{event_id: event.id}
       |> EventParticipant.changeset(attrs)
       |> Repo.insert()
+    end
+  end
+
+  def create_guest_participant(%Event{} = event, attrs) do
+    %EventParticipant{event_id: event.id, kind: "guest", status: "active"}
+    |> EventParticipant.changeset(attrs)
+    |> Repo.insert()
+    |> broadcast_result(event.id)
+  end
+
+  def get_active_public_participant(%Event{} = event, participant_id) do
+    EventParticipant
+    |> where(event_id: ^event.id, id: ^participant_id, status: "active")
+    |> Repo.one()
+  end
+
+  def get_or_create_user_participant(%Event{} = event, %User{} = user) do
+    case Repo.get_by(EventParticipant, event_id: event.id, user_id: user.id, kind: "user") do
+      %EventParticipant{} = participant ->
+        {:ok, participant}
+
+      nil ->
+        %EventParticipant{event_id: event.id, user_id: user.id, kind: "user", status: "active"}
+        |> EventParticipant.changeset(%{})
+        |> Repo.insert()
+        |> broadcast_result(event.id)
     end
   end
 
@@ -231,8 +321,81 @@ defmodule Escalimetro.Events do
       %Vote{event_id: event.id, ballot_id: ballot.id, participant_id: participant.id}
       |> Vote.changeset(attrs)
       |> Repo.insert()
+      |> broadcast_result(event.id)
     end
   end
+
+  def create_public_vote(
+        %Event{} = event,
+        %EventParticipant{} = participant,
+        %Ballot{} = ballot,
+        attrs
+      ) do
+    with :ok <- ensure_vote_context(event, participant, ballot),
+         :ok <- ensure_active_participant(participant),
+         :ok <- ensure_event_accepts_votes(event),
+         :ok <- ensure_ballot_open(ballot),
+         :ok <- ensure_vote_matches_ballot(ballot, attrs) do
+      %Vote{event_id: event.id, ballot_id: ballot.id, participant_id: participant.id}
+      |> Vote.changeset(attrs)
+      |> Repo.insert()
+      |> broadcast_result(event.id)
+    end
+  end
+
+  def toggle_public_option_vote(
+        %Event{} = event,
+        %EventParticipant{} = participant,
+        %Ballot{kind: "multiple_choice"} = ballot,
+        %BallotOption{} = option
+      ) do
+    with :ok <- ensure_vote_context(event, participant, ballot),
+         :ok <- ensure_option_context(ballot, option),
+         :ok <- ensure_active_participant(participant),
+         :ok <- ensure_event_accepts_votes(event),
+         :ok <- ensure_ballot_open(ballot) do
+      case get_active_option_vote(event, participant, ballot, option) do
+        %Vote{} = vote ->
+          vote
+          |> Repo.delete()
+          |> broadcast_result(event.id)
+
+        nil ->
+          create_public_vote(event, participant, ballot, %{ballot_option_id: option.id})
+      end
+    end
+  end
+
+  def toggle_public_value_vote(
+        %Event{} = event,
+        %EventParticipant{} = participant,
+        %Ballot{kind: "yes_no_maybe"} = ballot,
+        value
+      )
+      when value in ~w(yes no maybe) do
+    with :ok <- ensure_vote_context(event, participant, ballot),
+         :ok <- ensure_active_participant(participant),
+         :ok <- ensure_event_accepts_votes(event),
+         :ok <- ensure_ballot_open(ballot) do
+      case get_active_value_vote(event, participant, ballot) do
+        %Vote{value: ^value} = vote ->
+          vote
+          |> Repo.delete()
+          |> broadcast_result(event.id)
+
+        %Vote{} = vote ->
+          with {:ok, _vote} <- Repo.delete(vote) do
+            create_public_vote(event, participant, ballot, %{value: value})
+          end
+
+        nil ->
+          create_public_vote(event, participant, ballot, %{value: value})
+      end
+    end
+  end
+
+  def toggle_public_value_vote(%Event{}, %EventParticipant{}, %Ballot{}, _value),
+    do: {:error, :invalid_vote}
 
   def reject_vote(%Scope{} = scope, %Vote{} = vote, attrs) do
     event = get_event!(scope, vote.event_id)
@@ -241,7 +404,70 @@ defmodule Escalimetro.Events do
       vote
       |> Vote.reject_changeset(scope.user.id, attrs)
       |> Repo.update()
+      |> broadcast_result(event.id)
     end
+  end
+
+  def delete_vote(%Scope{} = scope, %Event{} = event, vote_id) do
+    with :ok <- authorize_event_management(scope, event),
+         :ok <- ensure_event_editable(event),
+         %Vote{} = vote <- Repo.get_by(Vote, id: vote_id, event_id: event.id) do
+      vote
+      |> Repo.delete()
+      |> broadcast_result(event.id)
+    else
+      nil -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def delete_participant_votes(%Scope{} = scope, %Event{} = event, participant_id) do
+    with :ok <- authorize_event_management(scope, event),
+         :ok <- ensure_event_editable(event),
+         %EventParticipant{} <-
+           Repo.get_by(EventParticipant, id: participant_id, event_id: event.id) do
+      Vote
+      |> where(event_id: ^event.id, participant_id: ^participant_id)
+      |> Repo.delete_all()
+
+      broadcast_event(event.id)
+      {:ok, :deleted}
+    else
+      nil -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  def get_ballot_for_event!(%Event{} = event, id) do
+    Ballot
+    |> where(event_id: ^event.id)
+    |> preload(:options)
+    |> Repo.get!(id)
+  end
+
+  def get_ballot_option_for_ballot!(%Ballot{} = ballot, id) do
+    BallotOption
+    |> where(ballot_id: ^ballot.id)
+    |> Repo.get!(id)
+  end
+
+  def vote_counts(%Ballot{kind: "yes_no_maybe", votes: votes}) do
+    votes
+    |> Enum.reject(& &1.rejected_at)
+    |> Enum.frequencies_by(& &1.value)
+  end
+
+  def vote_counts(%Ballot{options: options, votes: votes}) do
+    counts =
+      votes
+      |> Enum.reject(& &1.rejected_at)
+      |> Enum.frequencies_by(& &1.ballot_option_id)
+
+    Map.new(options, fn option -> {option.id, Map.get(counts, option.id, 0)} end)
+  end
+
+  def subscribe_event(%Event{id: event_id}) do
+    Phoenix.PubSub.subscribe(Escalimetro.PubSub, topic(event_id))
   end
 
   defp manageable_events_query(user_id) do
@@ -275,6 +501,28 @@ defmodule Escalimetro.Events do
   defp ensure_ballot_open(%Ballot{status: "open"}), do: :ok
   defp ensure_ballot_open(%Ballot{}), do: {:error, :closed_ballot}
 
+  defp ensure_ballot_accepts_suggestions(%Ballot{allow_sugestion: true}), do: :ok
+  defp ensure_ballot_accepts_suggestions(%Ballot{}), do: {:error, :suggestions_disabled}
+
+  defp ensure_active_participant(%EventParticipant{status: "active"}), do: :ok
+  defp ensure_active_participant(%EventParticipant{}), do: {:error, :invalidated_participant}
+
+  defp ensure_vote_matches_ballot(%Ballot{kind: "yes_no_maybe"}, attrs) do
+    if get_param(attrs, :value, "value") do
+      :ok
+    else
+      {:error, :invalid_vote}
+    end
+  end
+
+  defp ensure_vote_matches_ballot(%Ballot{kind: "multiple_choice"}, attrs) do
+    if get_param(attrs, :ballot_option_id, "ballot_option_id") do
+      :ok
+    else
+      {:error, :invalid_vote}
+    end
+  end
+
   defp ensure_vote_context(%Event{id: event_id}, %EventParticipant{event_id: event_id}, %Ballot{
          event_id: event_id
        }) do
@@ -282,6 +530,42 @@ defmodule Escalimetro.Events do
   end
 
   defp ensure_vote_context(_event, _participant, _ballot), do: {:error, :invalid_vote_context}
+
+  defp ensure_option_context(%Ballot{id: ballot_id}, %BallotOption{ballot_id: ballot_id}), do: :ok
+  defp ensure_option_context(%Ballot{}, %BallotOption{}), do: {:error, :invalid_vote_context}
+
+  defp get_active_option_vote(
+         %Event{id: event_id},
+         %EventParticipant{id: participant_id},
+         %Ballot{id: ballot_id},
+         %BallotOption{id: option_id}
+       ) do
+    Repo.one(
+      from vote in Vote,
+        where:
+          vote.event_id == ^event_id and
+            vote.participant_id == ^participant_id and
+            vote.ballot_id == ^ballot_id and
+            vote.ballot_option_id == ^option_id and
+            is_nil(vote.rejected_at)
+    )
+  end
+
+  defp get_active_value_vote(
+         %Event{id: event_id},
+         %EventParticipant{id: participant_id},
+         %Ballot{id: ballot_id}
+       ) do
+    Repo.one(
+      from vote in Vote,
+        where:
+          vote.event_id == ^event_id and
+            vote.participant_id == ^participant_id and
+            vote.ballot_id == ^ballot_id and
+            is_nil(vote.ballot_option_id) and
+            is_nil(vote.rejected_at)
+    )
+  end
 
   defp open_ballots_query(event_id) do
     from ballot in Ballot,
@@ -295,4 +579,21 @@ defmodule Escalimetro.Events do
       Map.put(params, atom_key, value)
     end
   end
+
+  defp get_param(%{} = params, atom_key, string_key) do
+    Map.get(params, string_key) || Map.get(params, atom_key)
+  end
+
+  defp broadcast_result({:ok, struct}, event_id) do
+    broadcast_event(event_id)
+    {:ok, struct}
+  end
+
+  defp broadcast_result({:error, reason}, _event_id), do: {:error, reason}
+
+  defp broadcast_event(event_id) do
+    Endpoint.broadcast(topic(event_id), "event_updated", %{})
+  end
+
+  defp topic(event_id), do: "events:#{event_id}"
 end

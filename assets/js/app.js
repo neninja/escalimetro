@@ -25,11 +25,44 @@ import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/escalimetro"
 import topbar from "../vendor/topbar"
 
+const Hooks = {
+  GuestParticipantSession: {
+    mounted() {
+      const publicInviteId = this.el.dataset.publicInviteId
+      const key = `escalimetro:guest-participant:${publicInviteId}`
+      const stored = window.localStorage.getItem(key)
+
+      if (stored) {
+        try {
+          const participant = JSON.parse(stored)
+
+          if (participant.token) {
+            this.pushEvent("restore_participant", {token: participant.token})
+          }
+        } catch (_error) {
+          window.localStorage.removeItem(key)
+        }
+      }
+
+      this.handleEvent("store_guest_participant", ({public_invite_id, token, display_name}) => {
+        window.localStorage.setItem(
+          `escalimetro:guest-participant:${public_invite_id}`,
+          JSON.stringify({token, display_name})
+        )
+      })
+
+      this.handleEvent("clear_guest_participant", ({public_invite_id}) => {
+        window.localStorage.removeItem(`escalimetro:guest-participant:${public_invite_id}`)
+      })
+    }
+  }
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks},
+  hooks: {...colocatedHooks, ...Hooks},
 })
 
 // Show progress bar on live navigation and form submits
@@ -80,4 +113,3 @@ if (process.env.NODE_ENV === "development") {
     window.liveReloader = reloader
   })
 }
-

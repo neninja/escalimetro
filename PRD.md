@@ -22,7 +22,7 @@ Sistema web com agrupamentos de multiplas votações em um único evento. Usuár
 
 ## Jornada do Usuário
 
-- Usuário cria evento, organiza pautas, convida participantes, bloqueia votos, encerra pautas e conclui evento com um relatório facilmente compartilhável.
+- Usuário cria evento, organiza pautas, convida participantes, bloqueia votos já computados alterando o total, encerra pautas e conclui evento com um relatório facilmente compartilhável.
 - Usuário acessa evento via link, vota, acompanha pautas mesmo após evento encerrado.
 - Convidado acessa evento via link, identifica-se, vota, acompanha pautas mesmo após evento encerrado.
 
@@ -77,11 +77,6 @@ Focado na interação em tempo real e na facilidade de uso em dispositivos móve
 
 - In personate: Usuários que são responsáveis pelo sistema, podem fazer in personate para verificação de bugs
 - Dashboard: Quantos usuários ativos, eventos abertos etc
-
-## O que está fora do escopo
-
-- Login social
-- Prestação de contas do evento, juntamente com ferramentas estilo "split wise" que simplificam a distribuição dos pagamentos
 
 ## Stack Técnica Relevante
 

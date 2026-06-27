@@ -14,6 +14,7 @@ defmodule Escalimetro.Repo.DevSeed do
   alias Escalimetro.Repo
 
   @password "devpassword123"
+  @sample_event_public_invite_id "11111111-1111-4111-8111-111111111111"
 
   def run do
     admin =
@@ -25,7 +26,6 @@ defmodule Escalimetro.Repo.DevSeed do
     users = %{
       rei: ensure_user!("rei@escalimetro.dev", password: @password),
       neni: ensure_user!("neni@escalimetro.dev", password: @password),
-      vitor: ensure_user!("vitor@escalimetro.dev", password: @password)
     }
 
     owner_scope = Scope.for_user(users.neni)
@@ -35,6 +35,7 @@ defmodule Escalimetro.Repo.DevSeed do
         title: "Encontro Presencial",
         description: "Primeiro encontro dos envolvidos para decidir comida e combinados.",
         location: "Sala principal",
+        public_invite_id: @sample_event_public_invite_id,
         status: "open"
       })
 
@@ -43,10 +44,47 @@ defmodule Escalimetro.Repo.DevSeed do
     participants = %{
       rei: ensure_user_participant!(owner_scope, event, users.rei),
       neni: ensure_user_participant!(owner_scope, event, users.neni),
-      vitor: ensure_user_participant!(owner_scope, event, users.vitor),
-      bia: ensure_guest_participant!(owner_scope, event, "Bia")
+      vitor: ensure_guest_participant!(owner_scope, event, "Vitor")
     }
 
+    pizza_ballot =
+      ensure_ballot!(owner_scope, event, %{
+        title: "Sabores de pizza",
+        description: "Escolha os sabores preferidos para o encontro.",
+        kind: "multiple_choice",
+        allow_sugestion: true,
+        status: "open",
+        position: 0,
+        options: pizza_options()
+      })
+
+    attendance_ballot =
+      ensure_ballot!(owner_scope, event, %{
+        title: "Voce consegue participar presencialmente?",
+        description: "Confirme sua disponibilidade para o encontro.",
+        kind: "yes_no_maybe",
+        allow_sugestion: false,
+        status: "open",
+        position: 1
+      })
+
+    cast_option_votes!(event, participants.rei, pizza_ballot, [
+      "Calabresa",
+      "Quatro Queijos"
+    ])
+
+    cast_option_votes!(event, participants.neni, pizza_ballot, [
+      "Portuguesa",
+      "Calabresa"
+    ])
+
+    cast_option_votes!(event, participants.vitor, pizza_ballot, [
+      "Strogonoff"
+    ])
+
+    cast_value_vote!(event, participants.rei, attendance_ballot, "yes")
+    cast_value_vote!(event, participants.neni, attendance_ballot, "yes")
+    cast_value_vote!(event, participants.vitor, attendance_ballot, "maybe")
   end
 
   defp ensure_user!(email, opts) do
@@ -83,15 +121,32 @@ defmodule Escalimetro.Repo.DevSeed do
   end
 
   defp ensure_event!(%Scope{} = scope, attrs) do
-    case Repo.get_by(Event, title: attrs.title, owner_user_id: scope.user.id) do
-      %Event{} = event ->
-        event
+    event =
+      case Repo.get_by(Event, title: attrs.title, owner_user_id: scope.user.id) do
+        %Event{} = event ->
+          event
 
-      nil ->
-        {:ok, event} = Events.create_event(scope, attrs)
-        event
+        nil ->
+          {:ok, event} = Events.create_event(scope, attrs)
+          event
+      end
+
+    maybe_set_public_invite_id!(event, attrs)
+  end
+
+  defp maybe_set_public_invite_id!(%Event{} = event, %{public_invite_id: public_invite_id}) do
+    {:ok, public_invite_id} = Ecto.UUID.cast(public_invite_id)
+
+    if event.public_invite_id == public_invite_id do
+      event
+    else
+      event
+      |> Ecto.Changeset.change(public_invite_id: public_invite_id)
+      |> Repo.update!()
     end
   end
+
+  defp maybe_set_public_invite_id!(%Event{} = event, _attrs), do: event
 
   defp ensure_event_admin!(%Scope{} = scope, %Event{} = event, %User{} = user) do
     exists? =
@@ -147,6 +202,8 @@ defmodule Escalimetro.Repo.DevSeed do
     ballot =
       case Repo.get_by(Ballot, event_id: event.id, title: attrs.title) do
         %Ballot{} = ballot ->
+          ballot_attrs = Map.drop(attrs, [:options])
+          {:ok, ballot} = Events.update_ballot(scope, ballot, ballot_attrs)
           ballot
 
         nil ->
@@ -178,15 +235,26 @@ defmodule Escalimetro.Repo.DevSeed do
        ) do
     ballot = Repo.preload(ballot, :options, force: true)
 
-    Enum.each(votes, fn {label, intensity, justification} ->
+    Enum.each(votes, fn label ->
       option = Enum.find(ballot.options, &(&1.label == label))
 
-      {:ok, _vote} =
-        Events.create_vote(%Scope{}, event, participant, ballot, %{
-          ballot_option_id: option.id,
-          intensity: intensity,
-          justification: justification
-        })
+      existing_vote_query =
+        from vote in Escalimetro.Events.Vote,
+          where:
+            vote.event_id == ^event.id and
+              vote.ballot_id == ^ballot.id and
+              vote.participant_id == ^participant.id and
+              vote.ballot_option_id == ^option.id and
+              is_nil(vote.rejected_at)
+
+      if Repo.exists?(existing_vote_query) do
+        Repo.update_all(existing_vote_query, set: [justification: nil])
+      else
+        {:ok, _vote} =
+          Events.create_vote(%Scope{}, event, participant, ballot, %{
+            ballot_option_id: option.id
+          })
+      end
     end)
   end
 
@@ -194,14 +262,25 @@ defmodule Escalimetro.Repo.DevSeed do
          %Event{} = event,
          %EventParticipant{} = participant,
          %Ballot{} = ballot,
-         value,
-         justification
+         value
        ) do
-    {:ok, _vote} =
-      Events.create_vote(%Scope{}, event, participant, ballot, %{
-        value: value,
-        justification: justification
-      })
+    existing_vote_query =
+      from vote in Escalimetro.Events.Vote,
+        where:
+          vote.event_id == ^event.id and
+            vote.ballot_id == ^ballot.id and
+            vote.participant_id == ^participant.id and
+            is_nil(vote.ballot_option_id) and
+            is_nil(vote.rejected_at)
+
+    if Repo.exists?(existing_vote_query) do
+      Repo.update_all(existing_vote_query, set: [justification: nil])
+    else
+      {:ok, _vote} =
+        Events.create_vote(%Scope{}, event, participant, ballot, %{
+          value: value
+        })
+    end
   end
 
   defp pizza_options do

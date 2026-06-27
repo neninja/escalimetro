@@ -69,6 +69,7 @@ defmodule EscalimetroWeb.Router do
 
     live_session :current_user,
       on_mount: [{EscalimetroWeb.UserAuth, :mount_current_scope}] do
+      live "/events/:public_invite_id/vote", EventLive.Vote, :show
       live "/users/register", UserLive.Registration, :new
       live "/users/log-in", UserLive.Login, :new
       live "/users/log-in/:token", UserLive.Confirmation, :new
