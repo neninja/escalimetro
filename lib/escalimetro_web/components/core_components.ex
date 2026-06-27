@@ -183,6 +183,8 @@ defmodule EscalimetroWeb.CoreComponents do
   attr :multiple, :boolean, default: false, doc: "the multiple flag for select inputs"
   attr :class, :any, default: nil, doc: "the input class to use over defaults"
   attr :error_class, :any, default: nil, doc: "the input error class to use over defaults"
+  attr :wrapper_class, :any, default: nil, doc: "the input wrapper class to use over defaults"
+  attr :label_class, :any, default: nil, doc: "the label class to use over defaults"
 
   attr :rest, :global,
     include: ~w(accept autocomplete capture cols disabled form list max maxlength min minlength
@@ -212,7 +214,7 @@ defmodule EscalimetroWeb.CoreComponents do
       end)
 
     ~H"""
-    <div class="fieldset mb-2">
+    <div class={@wrapper_class || "fieldset mb-2"}>
       <label for={@id}>
         <input
           type="hidden"
@@ -240,9 +242,9 @@ defmodule EscalimetroWeb.CoreComponents do
 
   def input(%{type: "select"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class={@wrapper_class || "fieldset mb-2"}>
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class={@label_class || "label mb-1"}>{@label}</span>
         <select
           id={@id}
           name={@name}
@@ -261,9 +263,9 @@ defmodule EscalimetroWeb.CoreComponents do
 
   def input(%{type: "textarea"} = assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class={@wrapper_class || "fieldset mb-2"}>
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class={@label_class || "label mb-1"}>{@label}</span>
         <textarea
           id={@id}
           name={@name}
@@ -282,9 +284,9 @@ defmodule EscalimetroWeb.CoreComponents do
   # All other inputs text, datetime-local, url, password, etc. are handled here...
   def input(assigns) do
     ~H"""
-    <div class="fieldset mb-2">
+    <div class={@wrapper_class || "fieldset mb-2"}>
       <label for={@id}>
-        <span :if={@label} class="label mb-1">{@label}</span>
+        <span :if={@label} class={@label_class || "label mb-1"}>{@label}</span>
         <input
           type={@type}
           name={@name}

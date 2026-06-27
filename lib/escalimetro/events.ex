@@ -232,7 +232,7 @@ defmodule Escalimetro.Events do
       EventParticipant
       |> where(event_id: ^event.id)
       |> order_by([p], asc: p.inserted_at, asc: p.id)
-      |> preload(votes: [:ballot, :ballot_option])
+      |> preload([:user, votes: [:ballot, :ballot_option]])
       |> Repo.all()
     else
       []

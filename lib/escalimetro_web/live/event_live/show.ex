@@ -199,18 +199,23 @@ defmodule EscalimetroWeb.EventLive.Show do
                   for={@option_forms[ballot.id]}
                   id={"ballot-option-form-#{ballot.id}"}
                   phx-submit="add_option"
-                  class="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"
+                  class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start"
                 >
                   <input type="hidden" name="ballot_id" value={ballot.id} />
-                  <.input
-                    field={@option_forms[ballot.id][:label]}
-                    id={"ballot-option-label-#{ballot.id}"}
-                    placeholder="Nova opcao"
-                  />
+                  <div class="min-w-0 flex-1">
+                    <.input
+                      field={@option_forms[ballot.id][:label]}
+                      id={"ballot-option-label-#{ballot.id}"}
+                      label="Nova opcao"
+                      label_class="sr-only"
+                      placeholder="Nova opcao"
+                      wrapper_class="mb-0"
+                    />
+                  </div>
                   <button
                     id={"add-ballot-option-#{ballot.id}"}
                     type="submit"
-                    class="btn btn-primary sm:mt-6"
+                    class="btn btn-primary w-full sm:w-auto"
                   >
                     <.icon name="hero-plus" class="size-4" /> Adicionar
                   </button>

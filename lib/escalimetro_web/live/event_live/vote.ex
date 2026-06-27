@@ -89,7 +89,7 @@ defmodule EscalimetroWeb.EventLive.Vote do
                 <label
                   :if={ballot.status == "open" and @event.status != "completed"}
                   id={"vote-option-control-#{option.id}"}
-                  class="flex cursor-pointer items-center justify-between gap-3 rounded-md bg-base-200/70 px-3 py-2 text-sm font-semibold transition hover:bg-base-200"
+                  class="flex cursor-pointer items-center justify-between gap-3 rounded-md px-1 py-1.5 text-sm font-semibold transition hover:text-primary"
                 >
                   <span class="flex min-w-0 items-center gap-3">
                     <input
@@ -128,7 +128,7 @@ defmodule EscalimetroWeb.EventLive.Vote do
                 <label
                   :if={ballot.status == "open" and @event.status != "completed"}
                   id={"vote-value-control-#{ballot.id}-#{value}"}
-                  class="flex cursor-pointer items-center justify-between gap-3 rounded-md bg-base-200/70 px-3 py-2 text-sm font-semibold transition hover:bg-base-200"
+                  class="flex cursor-pointer items-center justify-between gap-3 rounded-md px-1 py-1.5 text-sm font-semibold transition hover:text-primary"
                 >
                   <span class="flex min-w-0 items-center gap-3">
                     <input
@@ -166,18 +166,23 @@ defmodule EscalimetroWeb.EventLive.Vote do
               for={@suggestion_forms[ballot.id]}
               id={"suggestion-form-#{ballot.id}"}
               phx-submit="suggest_option"
-              class="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]"
+              class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start"
             >
               <input type="hidden" name="ballot_id" value={ballot.id} />
-              <.input
-                field={@suggestion_forms[ballot.id][:label]}
-                id={"suggestion-label-#{ballot.id}"}
-                placeholder="Sugerir nova opcao"
-              />
+              <div class="min-w-0 flex-1">
+                <.input
+                  field={@suggestion_forms[ballot.id][:label]}
+                  id={"suggestion-label-#{ballot.id}"}
+                  label="Sugerir nova opcao"
+                  label_class="sr-only"
+                  placeholder="Sugerir nova opcao"
+                  wrapper_class="mb-0"
+                />
+              </div>
               <button
                 id={"suggestion-button-#{ballot.id}"}
                 type="submit"
-                class="btn btn-soft sm:mt-6"
+                class="btn btn-soft w-full sm:w-auto"
               >
                 Sugerir
               </button>

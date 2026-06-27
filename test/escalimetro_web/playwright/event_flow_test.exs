@@ -6,7 +6,7 @@ defmodule EscalimetroWeb.Playwright.EventFlowTest do
   import Escalimetro.AccountsFixtures
   import Escalimetro.EventsFixtures
 
-  alias Escalimetro.Events.{Ballot, Event}
+  alias Escalimetro.Events.{Ballot, BallotOption, Event, EventParticipant, Vote}
   alias Escalimetro.Repo
 
   test "authenticated user creates edits and completes an event", %{conn: conn} do
@@ -67,6 +67,116 @@ defmodule EscalimetroWeb.Playwright.EventFlowTest do
     |> visit(~p"/events/#{other_event}")
     |> assert_path(~p"/events")
     |> assert_has("#flash-error", text: "Evento nao encontrado ou sem acesso.")
+  end
+
+  test "critical voting journey covers authenticated guest and admin vote review", %{conn: conn} do
+    owner = user_fixture() |> set_password()
+    logged_voter = user_fixture() |> set_password()
+    title = unique_event_title()
+    ballot_title = unique_ballot_title()
+    option_label = unique_option_label()
+    guest_name = "Convidado #{System.unique_integer([:positive])}"
+
+    owner_session =
+      conn
+      |> log_in_with_password(owner.email)
+      |> visit(~p"/events")
+      |> click_link("Novo evento")
+      |> within("#event-form", fn session ->
+        session
+        |> fill_in("Titulo", with: title)
+        |> fill_in("Descricao", with: "Decisao acompanhada pelo CUJ")
+        |> fill_in("Local", with: "Sala CUJ")
+        |> click_button("Salvar evento")
+      end)
+      |> assert_has("#flash-info", text: "Evento criado com sucesso.")
+
+    event = event_from_current_path(owner_session)
+
+    owner_session =
+      owner_session
+      |> within("#ballot-form", fn session ->
+        session
+        |> fill_in("Titulo", with: ballot_title)
+        |> fill_in("Descricao", with: "Escolha uma opcao")
+        |> click_button("Criar pauta")
+      end)
+      |> assert_has("#flash-info", text: "Pauta criada.")
+
+    ballot = Repo.get_by!(Ballot, event_id: event.id, title: ballot_title)
+
+    owner_session
+    |> within("#ballot-option-form-#{ballot.id}", fn session ->
+      session
+      |> fill_in("Nova opcao", with: option_label)
+      |> click_button("Adicionar")
+    end)
+    |> assert_has("#ballot-#{ballot.id}", text: option_label)
+
+    option = Repo.get_by!(BallotOption, ballot_id: ballot.id, label: option_label)
+
+    voter_session =
+      owner_session
+      |> clear_cookies()
+      |> log_in_with_password(logged_voter.email)
+      |> visit(~p"/events/#{event.public_invite_id}/vote")
+      |> assert_has("#voting-area")
+      |> refute_has("#participant-form")
+      |> click("#vote-option-checkbox-#{option.id}")
+
+    logged_participant =
+      Repo.get_by!(EventParticipant, event_id: event.id, user_id: logged_voter.id, kind: "user")
+
+    logged_vote =
+      Repo.get_by!(Vote,
+        event_id: event.id,
+        ballot_id: ballot.id,
+        participant_id: logged_participant.id,
+        ballot_option_id: option.id
+      )
+
+    assert logged_vote
+
+    anonymous_session =
+      voter_session
+      |> clear_cookies()
+      |> visit(~p"/events/#{event.public_invite_id}/vote")
+      |> assert_has("#participant-form")
+      |> refute_has("#voting-area")
+      |> within("#participant-form", fn session ->
+        session
+        |> fill_in("Nome ou apelido", with: guest_name)
+        |> click_button("Entrar na votacao")
+      end)
+      |> assert_has("#voting-area")
+      |> click("#vote-option-checkbox-#{option.id}")
+
+    guest_participant =
+      Repo.get_by!(EventParticipant, event_id: event.id, display_name: guest_name, kind: "guest")
+
+    guest_vote =
+      Repo.get_by!(Vote,
+        event_id: event.id,
+        ballot_id: ballot.id,
+        participant_id: guest_participant.id,
+        ballot_option_id: option.id
+      )
+
+    assert guest_vote
+
+    anonymous_session
+    |> clear_cookies()
+    |> log_in_with_password(owner.email)
+    |> visit(~p"/events/#{event}")
+    |> assert_has("#participant-review-#{logged_participant.id}", text: logged_voter.email)
+    |> assert_has("#participant-review-#{guest_participant.id}", text: guest_name)
+    |> click("#participant-vote-checkbox-#{logged_vote.id}")
+    |> assert_has("#participant-review-#{logged_participant.id}", text: "Sem votos ativos.")
+    |> click_button("Ignorar votos")
+    |> assert_has("#participant-review-#{guest_participant.id}", text: "Sem votos ativos.")
+
+    refute Repo.get(Vote, logged_vote.id)
+    refute Repo.get(Vote, guest_vote.id)
   end
 
   defp log_in_with_password(conn, email, password \\ valid_user_password()) do
