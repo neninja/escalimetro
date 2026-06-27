@@ -17,6 +17,12 @@
   themes: false;
 }
 
+@theme {
+  --color-trident-green: #009B4D;
+  --color-trident-blue: #00A3E0;
+  --color-trident-red: #EF3340;
+}
+
 /* daisyUI theme plugin. You can update this file by fetching the latest version with:
   curl -sLO https://github.com/saadeghi/daisyui/releases/latest/download/daisyui-theme.js
   We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
