@@ -83,8 +83,8 @@ defmodule Escalimetro.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate", "seed"],
       setup: ["deps.get", "ecto.setup", "assets.setup", "assets.build"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
-      "example.setup": ["run priv/repo/example.exs"],
-      "example.reset": ["ecto.reset", "example.setup"],
+      "dev.setup": ["run priv/repo/dev.exs"],
+      "dev.reset": ["ecto.reset", "dev.setup"],
       test: ["assets.build", "ecto.create --quiet", "ecto.migrate --quiet", "test"],
       "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.build": ["compile", "tailwind escalimetro", "esbuild escalimetro"],
@@ -94,7 +94,13 @@ defmodule Escalimetro.MixProject do
         "phx.digest"
       ],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
-      fresh: ["example.reset"],
+      fresh: ["dev.reset"],
+      "db.up": fn _ ->
+        System.cmd("docker-compose", ["up", "-d", "db"], into: IO.stream(:stdout, :line))
+      end,
+      "db.down": fn _ ->
+        System.cmd("docker-compose", ["down"], into: IO.stream(:stdout, :line))
+      end,
       server: ["phx.server"]
     ]
   end

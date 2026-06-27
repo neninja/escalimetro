@@ -29,29 +29,146 @@
     </script>
   </head>
   <body>
-    <ul class="menu menu-horizontal w-full relative z-10 flex items-center gap-4 px-4 sm:px-6 lg:px-8 justify-end">
-      <%= if @current_scope do %>
-        <li>
-          {@current_scope.user.email}
-        </li>
-        <li>
-          <.link href={~p"/events"}>Events</.link>
-        </li>
-        <li>
-          <.link href={~p"/users/settings"}>Settings</.link>
-        </li>
-        <li>
-          <.link href={~p"/users/log-out"} method="delete">Log out</.link>
-        </li>
-      <% else %>
-        <li>
-          <.link href={~p"/users/register"}>Register</.link>
-        </li>
-        <li>
-          <.link href={~p"/users/log-in"}>Log in</.link>
-        </li>
-      <% end %>
-    </ul>
+    <nav
+      id="root-navigation"
+      class="relative z-10 border-b border-base-300/70 bg-base-100/95 px-4 py-3 shadow-sm shadow-base-300/20 backdrop-blur sm:px-6 lg:px-8"
+      aria-label="Primary navigation"
+    >
+      <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
+        <.link
+          href={~p"/"}
+          id="root-navigation-brand"
+          class="flex min-w-0 items-center gap-2 rounded-md text-base-content transition hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+          aria-label="Escalimetro home"
+        >
+          <span class="size-9 shrink-0 bg-primary [mask-image:url('/images/logo.svg')] [mask-repeat:no-repeat] [mask-size:contain] [mask-position:center]">
+          </span>
+          <span class="hidden text-sm font-bold tracking-normal sm:block">Escalimetro</span>
+        </.link>
+
+        <div class="flex items-center gap-3">
+          <ul id="desktop-navigation-menu" class="hidden items-center gap-1 md:flex">
+            <%= if @current_scope do %>
+              <li class="max-w-[18rem] truncate px-3 py-2 text-sm font-medium text-base-content/70">
+                {@current_scope.user.email}
+              </li>
+              <li>
+                <.link
+                  href={~p"/events"}
+                  class="rounded-md px-3 py-2 text-sm font-semibold text-base-content/80 transition hover:bg-base-200 hover:text-base-content"
+                >
+                  Events
+                </.link>
+              </li>
+              <li>
+                <.link
+                  href={~p"/users/settings"}
+                  class="rounded-md px-3 py-2 text-sm font-semibold text-base-content/80 transition hover:bg-base-200 hover:text-base-content"
+                >
+                  Settings
+                </.link>
+              </li>
+              <li>
+                <.link
+                  href={~p"/users/log-out"}
+                  method="delete"
+                  class="rounded-md px-3 py-2 text-sm font-semibold text-base-content/80 transition hover:bg-base-200 hover:text-base-content"
+                >
+                  Log out
+                </.link>
+              </li>
+            <% else %>
+              <li>
+                <.link
+                  href={~p"/users/register"}
+                  class="rounded-md px-3 py-2 text-sm font-semibold text-base-content/80 transition hover:bg-base-200 hover:text-base-content"
+                >
+                  Register
+                </.link>
+              </li>
+              <li>
+                <.link
+                  href={~p"/users/log-in"}
+                  class="rounded-md bg-base-content px-3 py-2 text-sm font-semibold text-base-100 shadow-sm transition hover:bg-base-content/85"
+                >
+                  Log in
+                </.link>
+              </li>
+            <% end %>
+          </ul>
+
+          <div id="root-navigation-theme" class="hidden md:block">
+            <.theme_toggle id="root-navigation-theme-toggle" />
+          </div>
+
+          <details id="mobile-navigation-menu" class="group relative md:hidden">
+            <summary
+              id="mobile-navigation-toggle"
+              class="flex size-11 cursor-pointer list-none items-center justify-center rounded-md border border-base-300 bg-base-100 text-base-content shadow-sm transition hover:bg-base-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 [&::-webkit-details-marker]:hidden"
+              aria-label="Open navigation menu"
+            >
+              <.icon name="hero-bars-3" class="size-6 group-open:hidden" />
+              <.icon name="hero-x-mark" class="hidden size-6 group-open:block" />
+            </summary>
+
+            <div class="absolute right-0 mt-3 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-base-300 bg-base-100 shadow-xl shadow-base-300/50">
+              <div id="mobile-navigation-theme" class="border-b border-base-300 px-3 py-3">
+                <.theme_toggle id="mobile-navigation-theme-toggle" />
+              </div>
+              <ul id="mobile-navigation-links" class="flex flex-col p-2">
+                <%= if @current_scope do %>
+                  <li class="border-b border-base-300 px-3 py-3 text-sm font-medium text-base-content/70">
+                    <span class="block truncate">{@current_scope.user.email}</span>
+                  </li>
+                  <li>
+                    <.link
+                      href={~p"/events"}
+                      class="block rounded-md px-3 py-3 text-sm font-semibold text-base-content transition hover:bg-base-200"
+                    >
+                      Events
+                    </.link>
+                  </li>
+                  <li>
+                    <.link
+                      href={~p"/users/settings"}
+                      class="block rounded-md px-3 py-3 text-sm font-semibold text-base-content transition hover:bg-base-200"
+                    >
+                      Settings
+                    </.link>
+                  </li>
+                  <li>
+                    <.link
+                      href={~p"/users/log-out"}
+                      method="delete"
+                      class="block rounded-md px-3 py-3 text-sm font-semibold text-base-content transition hover:bg-base-200"
+                    >
+                      Log out
+                    </.link>
+                  </li>
+                <% else %>
+                  <li>
+                    <.link
+                      href={~p"/users/register"}
+                      class="block rounded-md px-3 py-3 text-sm font-semibold text-base-content transition hover:bg-base-200"
+                    >
+                      Register
+                    </.link>
+                  </li>
+                  <li>
+                    <.link
+                      href={~p"/users/log-in"}
+                      class="block rounded-md bg-base-content px-3 py-3 text-sm font-semibold text-base-100 shadow-sm transition hover:bg-base-content/85"
+                    >
+                      Log in
+                    </.link>
+                  </li>
+                <% end %>
+              </ul>
+            </div>
+          </details>
+        </div>
+      </div>
+    </nav>
     {@inner_content}
   </body>
 </html>
